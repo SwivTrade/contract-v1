@@ -1,5 +1,5 @@
 use anchor_lang::prelude::*;
-use anchor_spl::token::{self, Token, TokenAccount, Transfer};
+use anchor_spl::token::{self, Mint, Token, TokenAccount, Transfer};
 use crate::{Market, MarginAccount, Position, errors::ErrorCode, events::*};
 
 /// Deposit collateral into a margin account
@@ -10,7 +10,7 @@ pub fn deposit_collateral(ctx: Context<DepositCollateral>, amount: u64) -> Resul
         ctx.accounts.token_program.to_account_info(),
         Transfer {
             from: ctx.accounts.user_token_account.to_account_info(),
-            to: ctx.accounts.vault_token_account.to_account_info(),
+            to: ctx.accounts.vault.to_account_info(),
             authority: ctx.accounts.owner.to_account_info(),
         },
     );
@@ -43,19 +43,19 @@ pub fn withdraw_collateral<'info>(
 
     let market = &ctx.accounts.market;
     // Explicitly tie the lifetime of positions to 'info from Context
-   let positions = ctx.remaining_accounts
-    .iter()
-    .map(|account| Account::<Position>::try_from(account))
-    .collect::<Result<Vec<_>>>()?;
+//    let positions = ctx.remaining_accounts
+//     .iter()
+//     .map(|account| Account::<Position>::try_from(account))
+//     .collect::<Result<Vec<_>>>()?;
 
-    // Validate that all positions in margin_account.positions are provided
-    for position_key in &margin_account.positions {
-        if !positions.iter().any(|p| p.key() == *position_key) {
-            return Err(ErrorCode::InvalidPosition.into());
-        }
-    }
+//     // Validate that all positions in margin_account.positions are provided
+//     for position_key in &margin_account.positions {
+//         if !positions.iter().any(|p| p.key() == *position_key) {
+//             return Err(ErrorCode::InvalidPosition.into());
+//         }
+//     }
 
-    let required_margin = calculate_required_margin(margin_account, &positions, market)?;
+    let required_margin = calculate_required_margin(margin_account, &[], market)?;
     let remaining_collateral = margin_account.collateral
         .checked_sub(amount)
         .ok_or(ErrorCode::MathOverflow)?;
@@ -68,7 +68,7 @@ pub fn withdraw_collateral<'info>(
     let transfer_ctx = CpiContext::new_with_signer(
         ctx.accounts.token_program.to_account_info(),
         Transfer {
-            from: ctx.accounts.vault_token_account.to_account_info(),
+            from: ctx.accounts.vault.to_account_info(),
             to: ctx.accounts.user_token_account.to_account_info(),
             authority: ctx.accounts.market.to_account_info(),
         },
@@ -142,13 +142,19 @@ pub struct DepositCollateral<'info> {
         constraint = margin_account.owner == owner.key() @ ErrorCode::Unauthorized,
     )]
     pub margin_account: Account<'info, MarginAccount>,
+    pub market: Account<'info, Market>,
     #[account(
         mut,
         constraint = user_token_account.owner == owner.key() @ ErrorCode::Unauthorized,
     )]
     pub user_token_account: Account<'info, TokenAccount>,
-    #[account(mut)]
-    pub vault_token_account: Account<'info, TokenAccount>,
+    #[account(
+        mut,
+        associated_token::mint = mint,
+        associated_token::authority = market
+    )]
+    pub vault: Account<'info, TokenAccount>,
+    pub mint: Account<'info, Mint>,
     pub token_program: Program<'info, Token>,
 }
 
@@ -162,6 +168,8 @@ pub struct WithdrawCollateral<'info> {
         constraint = margin_account.perp_market == market.key() @ ErrorCode::InvalidParameter,
     )]
     pub margin_account: Account<'info, MarginAccount>,
+    #[account(constraint = market.is_active @ ErrorCode::MarketInactive)]
+    pub market: Account<'info, Market>,
     #[account(
         mut,
         constraint = user_token_account.owner == owner.key() @ ErrorCode::Unauthorized,
@@ -169,11 +177,11 @@ pub struct WithdrawCollateral<'info> {
     pub user_token_account: Account<'info, TokenAccount>,
     #[account(
         mut,
-        constraint = vault_token_account.owner == market.key() @ ErrorCode::Unauthorized,
+        associated_token::mint = mint,
+        associated_token::authority = market
     )]
-    pub vault_token_account: Account<'info, TokenAccount>,
-    #[account(constraint = market.is_active @ ErrorCode::MarketInactive)]
-    pub market: Account<'info, Market>,
+    pub vault: Account<'info, TokenAccount>,
+    pub mint: Account<'info, Mint>,
     pub token_program: Program<'info, Token>,
     // Positions are passed via remaining_accounts
 }

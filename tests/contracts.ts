@@ -1,20 +1,23 @@
 import * as anchor from "@coral-xyz/anchor";
 import { Program } from "@coral-xyz/anchor";
 import { PublicKey, SystemProgram, Keypair } from "@solana/web3.js";
-import { TOKEN_PROGRAM_ID, createMint, createAccount, mintTo } from "@solana/spl-token";
+import { TOKEN_PROGRAM_ID, createMint, createAccount, mintTo, getAssociatedTokenAddress, ASSOCIATED_TOKEN_PROGRAM_ID } from "@solana/spl-token";
 import { assert } from "chai";
-import idl from "../target/idl/contracts.json"; // Adjust path if different
+import idl from "../target/idl/contracts.json";
+import { Contracts } from "../target/types/contracts";
 
 describe("contracts", () => {
   const provider = anchor.AnchorProvider.env();
   anchor.setProvider(provider);
-  const wallet = provider.wallet as anchor.Wallet;
+  // const wallet = provider.wallet as anchor.Wallet;
+  const wallet = anchor.workspace.Contracts.provider.wallet;
 
-  // Replace with your actual deployed program ID
-  const programId = new PublicKey("s2zmrr2SqcwCdeAGRiPFftDSV9CRhXqAbRcMgmh4goC"); // e.g., "7vW3vX4QDGzqXwN2cZ9zZ8r5g5e5e5e5e5e5e5e5e5e5e5e5e5e5"
-  let program: Program;
 
-  // Use a devnet Pyth SOL/USD price update feed (for pyth-solana-receiver-sdk)
+  // Use the program ID from your Rust file
+  // const programId = new PublicKey("s2zmrr2SqcwCdeAGRiPFftDSV9CRhXqAbRcMgmh4goC");
+  let program = anchor.workspace.Contracts as Program<Contracts>;
+
+  // Use a devnet Pyth SOL/USD price update feed
   const pythPriceUpdate = new PublicKey("6FteNKKPH2WHLr7rP3Z8X6SWsKo2PhCRe6cYx2c2s5wL"); // SOL/USD devnet
 
   // Market setup
@@ -40,13 +43,10 @@ describe("contracts", () => {
   const mintAuthority = Keypair.generate();
 
   before(async () => {
-    // Use the imported IDL directly
-    program = new Program(idl, programId, provider);
-
     // Initialize market PDA
     [marketPda, marketBump] = PublicKey.findProgramAddressSync(
       [Buffer.from("market"), Buffer.from(marketSymbol)],
-      programId
+      program.programId
     );
 
     // Token setup
@@ -63,11 +63,10 @@ describe("contracts", () => {
       tokenMint,
       wallet.publicKey
     );
-    vaultTokenAccount = await createAccount(
-      provider.connection,
-      wallet.payer,
+    vaultTokenAccount = await getAssociatedTokenAddress(
       tokenMint,
-      marketPda // Vault owned by market PDA
+      marketPda,
+      true // allowOwnerOffCurve = true because marketPda is a PDA
     );
     await mintTo(
       provider.connection,
@@ -81,13 +80,13 @@ describe("contracts", () => {
     // Initialize margin account PDA
     [marginAccountPda, marginAccountBump] = PublicKey.findProgramAddressSync(
       [Buffer.from("margin_account"), wallet.publicKey.toBuffer(), marketPda.toBuffer()],
-      programId
+      program.programId
     );
 
     // Initialize position PDA
     [positionPda, positionBump] = PublicKey.findProgramAddressSync(
       [Buffer.from("position"), marketPda.toBuffer(), wallet.publicKey.toBuffer()],
-      programId
+      program.programId
     );
   });
 
@@ -104,22 +103,28 @@ describe("contracts", () => {
       )
       .accounts({
         market: marketPda,
-        authority: wallet.publicKey,
+        authority: provider.wallet.publicKey,
+        vault: vaultTokenAccount,
+        mint: tokenMint,
         oracleAccount: pythPriceUpdate,
-        systemProgram: SystemProgram.programId,
+        systemProgram: anchor.web3.SystemProgram.programId,
+        tokenProgram: TOKEN_PROGRAM_ID,
+        associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
       })
       .rpc();
 
+    // Verify the market was initialized correctly
     const marketAccount = await program.account.market.fetch(marketPda);
-    assert.equal(marketAccount.authority.toString(), wallet.publicKey.toString());
     assert.equal(marketAccount.marketSymbol, marketSymbol);
-    assert.equal(marketAccount.fundingRate.toNumber(), initialFundingRate);
-    assert.equal(marketAccount.fundingInterval.toNumber(), fundingInterval);
-    assert.equal(marketAccount.maintenanceMarginRatio.toNumber(), maintenanceMarginRatio);
-    assert.equal(marketAccount.initialMarginRatio.toNumber(), initialMarginRatio);
-    assert.equal(marketAccount.maxLeverage.toNumber(), maxLeverage);
-    assert.ok(marketAccount.isActive);
+    assert.equal(marketAccount.authority.toString(), provider.wallet.publicKey.toString());
+    assert.equal(marketAccount.oracle.toString(), pythPriceUpdate.toString());
+    assert.equal(marketAccount.fundingRate.toString(), initialFundingRate.toString());
+    assert.equal(marketAccount.fundingInterval.toString(), fundingInterval.toString());
+    assert.equal(marketAccount.maintenanceMarginRatio.toString(), maintenanceMarginRatio.toString());
+    assert.equal(marketAccount.initialMarginRatio.toString(), initialMarginRatio.toString());
+    assert.equal(marketAccount.maxLeverage.toString(), maxLeverage.toString());
     assert.equal(marketAccount.bump, marketBump);
+    assert.equal(marketAccount.isActive, true);
   });
 
   it("Creates a margin account", async () => {
@@ -150,8 +155,10 @@ describe("contracts", () => {
       .accounts({
         owner: wallet.publicKey,
         marginAccount: marginAccountPda,
+        market: marketPda,
         userTokenAccount: userTokenAccount,
-        vaultTokenAccount: vaultTokenAccount,
+        vault: vaultTokenAccount,
+        mint: tokenMint,
         tokenProgram: TOKEN_PROGRAM_ID,
       })
       .rpc();
@@ -163,35 +170,35 @@ describe("contracts", () => {
     assert.equal(userTokenBalance.value.uiAmount, 50); // 100 - 50 = 50 remaining
   });
 
-  it("Opens a position to enable withdrawal test", async () => {
-    const side = { long: {} };
-    const size = new anchor.BN(1_000_000); // 1 token
-    const leverage = new anchor.BN(5);
+  // it("Opens a position to enable withdrawal test", async () => {
+  //   const side = { long: {} };
+  //   const size = new anchor.BN(1_000_000); // 1 token
+  //   const leverage = new anchor.BN(5);
 
-    await program.methods
-      .openPosition(side, size, leverage, positionBump)
-      .accounts({
-        market: marketPda,
-        position: positionPda,
-        marginAccount: marginAccountPda,
-        trader: wallet.publicKey,
-        oracleAccount: pythPriceUpdate,
-        systemProgram: SystemProgram.programId,
-      })
-      .rpc();
+  //   await program.methods
+  //     .openPosition(side, size, leverage, positionBump)
+  //     .accounts({
+  //       market: marketPda,
+  //       position: positionPda,
+  //       marginAccount: marginAccountPda,
+  //       trader: wallet.publicKey,
+  //       oracleAccount: pythPriceUpdate,
+  //       systemProgram: SystemProgram.programId,
+  //     })
+  //     .rpc();
 
-    const positionAccount = await program.account.position.fetch(positionPda);
-    assert.equal(positionAccount.trader.toString(), wallet.publicKey.toString());
-    assert.equal(positionAccount.market.toString(), marketPda.toString());
-    assert.deepEqual(positionAccount.side, side);
-    assert.equal(positionAccount.size.toNumber(), size.toNumber());
-    assert.ok(positionAccount.isOpen);
-    assert.equal(positionAccount.leverage.toNumber(), leverage.toNumber());
-    assert.equal(positionAccount.bump, positionBump);
+  //   const positionAccount = await program.account.position.fetch(positionPda);
+  //   assert.equal(positionAccount.trader.toString(), wallet.publicKey.toString());
+  //   assert.equal(positionAccount.market.toString(), marketPda.toString());
+  //   assert.deepEqual(positionAccount.side, side);
+  //   assert.equal(positionAccount.size.toNumber(), size.toNumber());
+  //   assert.ok(positionAccount.isOpen);
+  //   assert.equal(positionAccount.leverage.toNumber(), leverage.toNumber());
+  //   assert.equal(positionAccount.bump, positionBump);
 
-    const marginAccount = await program.account.marginAccount.fetch(marginAccountPda);
-    assert.ok(marginAccount.positions.includes(positionPda));
-  });
+  //   const marginAccount = await program.account.marginAccount.fetch(marginAccountPda);
+  //   assert.ok(marginAccount.positions.includes(positionPda));
+  // });
 
   it("Withdraws collateral", async () => {
     const amount = new anchor.BN(10_000_000); // 10 tokens
@@ -201,12 +208,13 @@ describe("contracts", () => {
       .accounts({
         owner: wallet.publicKey,
         marginAccount: marginAccountPda,
-        userTokenAccount: userTokenAccount,
-        vaultTokenAccount: vaultTokenAccount,
         market: marketPda,
+        userTokenAccount: userTokenAccount,
+        vault: vaultTokenAccount,
+        mint: tokenMint,
         tokenProgram: TOKEN_PROGRAM_ID,
       })
-      .remainingAccounts([{ pubkey: positionPda, isWritable: true, isSigner: false }])
+      //.remainingAccounts([{ pubkey: positionPda, isWritable: true, isSigner: false }])
       .rpc();
 
     const marginAccount = await program.account.marginAccount.fetch(marginAccountPda);

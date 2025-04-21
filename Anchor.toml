@@ -1,4 +1,5 @@
 [toolchain]
+anchor_version = "0.30.1"
 
 [features]
 resolution = true
@@ -11,7 +12,7 @@ contracts = "s2zmrr2SqcwCdeAGRiPFftDSV9CRhXqAbRcMgmh4goC"
 url = "https://api.apr.dev"
 
 [provider]
-cluster = "https://api.testnet.sonic.game/"
+cluster = "localnet"
 wallet = "~/.config/solana/id.json"
 
 [scripts]

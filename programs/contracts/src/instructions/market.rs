@@ -1,4 +1,5 @@
 use anchor_lang::prelude::*;
+use anchor_spl::{associated_token::AssociatedToken, token::{Mint, Token, TokenAccount}};
 use crate::{errors::ErrorCode, events::*, Market};
 
 #[derive(Accounts)]
@@ -15,16 +16,26 @@ pub struct InitializeMarket<'info> {
     #[account(
         init,
         payer = authority,
-        space = 256, // Use constant for exact size
+        space = Market::SPACE,
         seeds = [b"market", market_symbol.as_bytes()],
         bump
     )]
     pub market: Account<'info, Market>,
     #[account(mut)]
     pub authority: Signer<'info>,
+    #[account(
+        init,
+        payer = authority,
+        associated_token::mint = mint,
+        associated_token::authority = market
+    )]
+    pub vault: Account<'info, TokenAccount>,
+    pub mint: Account<'info, Mint>,
     /// CHECK: This is the Pyth price account, stored in market.oracle
     pub oracle_account: AccountInfo<'info>,
     pub system_program: Program<'info, System>,
+    pub token_program: Program<'info, Token>,
+    pub associated_token_program: Program<'info, AssociatedToken>,
 }
 
 pub fn initialize_market(
@@ -182,22 +193,3 @@ pub fn resume_market(ctx: Context<ResumeMarket>) -> Result<()> {
     Ok(())
 }
 
-// Define Market::SPACE constant in state/mod.rs for accurate allocation
-impl Market {
-    pub const SPACE: usize = 8 + // discriminator
-        32 + // authority: Pubkey
-        4 + 64 + // market_symbol: String (4 bytes len + max 64 chars)
-        8 + // base_asset_reserve: u64
-        8 + // quote_asset_reserve: u64
-        8 + // funding_rate: i64
-        8 + // last_funding_time: i64
-        8 + // funding_interval: i64
-        8 + // maintenance_margin_ratio: u64
-        8 + // initial_margin_ratio: u64
-        8 + // fee_pool: u64
-        8 + // insurance_fund: u64
-        8 + // max_leverage: u64
-        32 + // oracle: Pubkey
-        1 + // is_active: bool
-        1; // bump: u8
-}
