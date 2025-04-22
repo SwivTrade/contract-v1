@@ -15,7 +15,7 @@ pub struct InitializeMarket<'info> {
     #[account(
         init,
         payer = authority,
-        space = 256, // Use constant for exact size
+        space = Market::SPACE,
         seeds = [b"market", market_symbol.as_bytes()],
         bump
     )]
@@ -182,22 +182,3 @@ pub fn resume_market(ctx: Context<ResumeMarket>) -> Result<()> {
     Ok(())
 }
 
-// Define Market::SPACE constant in state/mod.rs for accurate allocation
-impl Market {
-    pub const SPACE: usize = 8 + // discriminator
-        32 + // authority: Pubkey
-        4 + 64 + // market_symbol: String (4 bytes len + max 64 chars)
-        8 + // base_asset_reserve: u64
-        8 + // quote_asset_reserve: u64
-        8 + // funding_rate: i64
-        8 + // last_funding_time: i64
-        8 + // funding_interval: i64
-        8 + // maintenance_margin_ratio: u64
-        8 + // initial_margin_ratio: u64
-        8 + // fee_pool: u64
-        8 + // insurance_fund: u64
-        8 + // max_leverage: u64
-        32 + // oracle: Pubkey
-        1 + // is_active: bool
-        1; // bump: u8
-}
