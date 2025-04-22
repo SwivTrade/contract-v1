@@ -1,5 +1,5 @@
 use anchor_lang::prelude::*;
-use anchor_spl::token::{self, Mint, Token, TokenAccount, Transfer};
+use anchor_spl::{associated_token::AssociatedToken, token::{self, Mint, Token, TokenAccount, Transfer}};
 use crate::{Market, MarginAccount, Position, errors::ErrorCode, events::*};
 
 /// Deposit collateral into a margin account
@@ -39,6 +39,7 @@ pub fn withdraw_collateral<'info>(
     require!(amount >= 1000, ErrorCode::WithdrawalTooSmall);
 
     let margin_account = &mut ctx.accounts.margin_account;
+    let owner = &ctx.accounts.owner;
     require!(margin_account.collateral >= amount, ErrorCode::InsufficientCollateral);
 
     let market = &ctx.accounts.market;
@@ -63,14 +64,23 @@ pub fn withdraw_collateral<'info>(
 
     margin_account.collateral = remaining_collateral;
 
-    let seeds = &[b"market", market.market_symbol.as_bytes(), &[market.bump]];
+    // Store the keys in variables first
+    let owner_key = owner.key();
+    let market_key = market.key();
+
+    let seeds = &[
+        b"margin_account".as_ref(),
+        owner_key.as_ref(),
+        market_key.as_ref(),
+        &[margin_account.bump],
+    ];
     let signer = &[&seeds[..]];
     let transfer_ctx = CpiContext::new_with_signer(
         ctx.accounts.token_program.to_account_info(),
         Transfer {
             from: ctx.accounts.vault.to_account_info(),
             to: ctx.accounts.user_token_account.to_account_info(),
-            authority: ctx.accounts.market.to_account_info(),
+            authority: ctx.accounts.margin_account.to_account_info(),
         },
         signer,
     );
@@ -142,7 +152,6 @@ pub struct DepositCollateral<'info> {
         constraint = margin_account.owner == owner.key() @ ErrorCode::Unauthorized,
     )]
     pub margin_account: Account<'info, MarginAccount>,
-    pub market: Account<'info, Market>,
     #[account(
         mut,
         constraint = user_token_account.owner == owner.key() @ ErrorCode::Unauthorized,
@@ -151,7 +160,7 @@ pub struct DepositCollateral<'info> {
     #[account(
         mut,
         associated_token::mint = mint,
-        associated_token::authority = market
+        associated_token::authority = margin_account
     )]
     pub vault: Account<'info, TokenAccount>,
     pub mint: Account<'info, Mint>,
@@ -178,7 +187,7 @@ pub struct WithdrawCollateral<'info> {
     #[account(
         mut,
         associated_token::mint = mint,
-        associated_token::authority = market
+        associated_token::authority = margin_account
     )]
     pub vault: Account<'info, TokenAccount>,
     pub mint: Account<'info, Mint>,
@@ -200,5 +209,15 @@ pub struct CreateMarginAccount<'info> {
     )]
     pub margin_account: Account<'info, MarginAccount>,
     pub market: Account<'info, Market>,
+    #[account(
+        init,
+        payer = owner,
+        associated_token::mint = mint,
+        associated_token::authority = margin_account
+    )]
+    pub vault: Account<'info, TokenAccount>,
+    pub mint: Account<'info, Mint>,
     pub system_program: Program<'info, System>,
+    pub token_program: Program<'info, Token>,
+    pub associated_token_program: Program<'info, AssociatedToken>,
 }

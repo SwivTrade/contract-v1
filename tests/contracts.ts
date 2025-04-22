@@ -49,6 +49,18 @@ describe("contracts", () => {
       program.programId
     );
 
+     // Initialize margin account PDA
+     [marginAccountPda, marginAccountBump] = PublicKey.findProgramAddressSync(
+      [Buffer.from("margin_account"), wallet.publicKey.toBuffer(), marketPda.toBuffer()],
+      program.programId
+    );
+
+    // Initialize position PDA
+    [positionPda, positionBump] = PublicKey.findProgramAddressSync(
+      [Buffer.from("position"), marketPda.toBuffer(), wallet.publicKey.toBuffer()],
+      program.programId
+    );
+
     // Token setup
     tokenMint = await createMint(
       provider.connection,
@@ -65,7 +77,7 @@ describe("contracts", () => {
     );
     vaultTokenAccount = await getAssociatedTokenAddress(
       tokenMint,
-      marketPda,
+      marginAccountPda,
       true // allowOwnerOffCurve = true because marketPda is a PDA
     );
     await mintTo(
@@ -77,17 +89,6 @@ describe("contracts", () => {
       100_000_000 // 100 tokens
     );
 
-    // Initialize margin account PDA
-    [marginAccountPda, marginAccountBump] = PublicKey.findProgramAddressSync(
-      [Buffer.from("margin_account"), wallet.publicKey.toBuffer(), marketPda.toBuffer()],
-      program.programId
-    );
-
-    // Initialize position PDA
-    [positionPda, positionBump] = PublicKey.findProgramAddressSync(
-      [Buffer.from("position"), marketPda.toBuffer(), wallet.publicKey.toBuffer()],
-      program.programId
-    );
   });
 
   it("Initializes a market", async () => {
@@ -104,12 +105,8 @@ describe("contracts", () => {
       .accounts({
         market: marketPda,
         authority: provider.wallet.publicKey,
-        vault: vaultTokenAccount,
-        mint: tokenMint,
         oracleAccount: pythPriceUpdate,
         systemProgram: anchor.web3.SystemProgram.programId,
-        tokenProgram: TOKEN_PROGRAM_ID,
-        associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
       })
       .rpc();
 
@@ -134,7 +131,11 @@ describe("contracts", () => {
         owner: wallet.publicKey,
         marginAccount: marginAccountPda,
         market: marketPda,
+        vault: vaultTokenAccount,
+        mint: tokenMint,
         systemProgram: SystemProgram.programId,
+        tokenProgram: TOKEN_PROGRAM_ID,
+        associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
       })
       .rpc();
 
@@ -155,7 +156,6 @@ describe("contracts", () => {
       .accounts({
         owner: wallet.publicKey,
         marginAccount: marginAccountPda,
-        market: marketPda,
         userTokenAccount: userTokenAccount,
         vault: vaultTokenAccount,
         mint: tokenMint,

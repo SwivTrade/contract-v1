@@ -59,15 +59,15 @@ pub mod contracts {
         instructions::funding::update_funding_payments(ctx)
     }
 
-    // pub fn open_position(
-    //     ctx: Context<OpenPosition>,
-    //     side: Side,
-    //     size: u64,
-    //     leverage: u64,
-    //     bump: u8,
-    // ) -> Result<()> {
-    //     instructions::position::open_position(ctx, side, size, leverage, bump)
-    // }
+    pub fn open_position(
+        ctx: Context<OpenPosition>,
+        side: Side,
+        size: u64,
+        leverage: u64,
+        bump: u8,
+    ) -> Result<()> {
+        instructions::position::open_position(ctx, side, size, leverage, bump)
+    }
 
     // pub fn close_position(ctx: Context<ClosePosition>) -> Result<()> {
     //     instructions::position::close_position(ctx)

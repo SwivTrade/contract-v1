@@ -1,5 +1,4 @@
 use anchor_lang::prelude::*;
-use anchor_spl::{associated_token::AssociatedToken, token::{Mint, Token, TokenAccount}};
 use crate::{errors::ErrorCode, events::*, Market};
 
 #[derive(Accounts)]
@@ -23,19 +22,9 @@ pub struct InitializeMarket<'info> {
     pub market: Account<'info, Market>,
     #[account(mut)]
     pub authority: Signer<'info>,
-    #[account(
-        init,
-        payer = authority,
-        associated_token::mint = mint,
-        associated_token::authority = market
-    )]
-    pub vault: Account<'info, TokenAccount>,
-    pub mint: Account<'info, Mint>,
     /// CHECK: This is the Pyth price account, stored in market.oracle
     pub oracle_account: AccountInfo<'info>,
     pub system_program: Program<'info, System>,
-    pub token_program: Program<'info, Token>,
-    pub associated_token_program: Program<'info, AssociatedToken>,
 }
 
 pub fn initialize_market(
