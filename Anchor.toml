@@ -6,13 +6,13 @@ resolution = true
 skip-lint = false
 
 [programs.localnet]
-contracts = "s2zmrr2SqcwCdeAGRiPFftDSV9CRhXqAbRcMgmh4goC"
+contracts = "2nga8op3u3j7Df7wsQv2n5hkRqjEFLjkWGGAfn4aHsfy"
 
 [registry]
 url = "https://api.apr.dev"
 
 [provider]
-cluster = "localnet"
+cluster = "https://api.testnet.sonic.game/"
 wallet = "~/.config/solana/id.json"
 
 [scripts]
