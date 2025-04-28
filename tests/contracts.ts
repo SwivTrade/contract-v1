@@ -21,7 +21,8 @@ describe("contracts", () => {
 
   // Market setup
   // const marketSymbol = "SOL-PERP";
-  const marketSymbol = "BTC-PERP";
+  // const marketSymbol = "BTC-PERP";
+  const marketSymbol = "ab-cd";
   const initialFundingRate = 0;
   const fundingInterval = 3600;
   const maintenanceMarginRatio = 500; // 5%
@@ -131,11 +132,7 @@ describe("contracts", () => {
         owner: wallet.publicKey,
         marginAccount: marginAccountPda,
         market: marketPda,
-        vault: vaultTokenAccount,
-        mint: tokenMint,
         systemProgram: SystemProgram.programId,
-        tokenProgram: TOKEN_PROGRAM_ID,
-        associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
       })
       .rpc();
 
@@ -160,6 +157,8 @@ describe("contracts", () => {
         vault: vaultTokenAccount,
         mint: tokenMint,
         tokenProgram: TOKEN_PROGRAM_ID,
+        systemProgram: SystemProgram.programId,
+        associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
       })
       .rpc();
 

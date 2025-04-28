@@ -158,13 +158,16 @@ pub struct DepositCollateral<'info> {
     )]
     pub user_token_account: Account<'info, TokenAccount>,
     #[account(
-        mut,
+        init_if_needed,
+        payer = owner,
         associated_token::mint = mint,
         associated_token::authority = margin_account
     )]
     pub vault: Account<'info, TokenAccount>,
     pub mint: Account<'info, Mint>,
     pub token_program: Program<'info, Token>,
+    pub system_program: Program<'info, System>,
+    pub associated_token_program: Program<'info, AssociatedToken>,
 }
 
 #[derive(Accounts)]
@@ -209,15 +212,5 @@ pub struct CreateMarginAccount<'info> {
     )]
     pub margin_account: Account<'info, MarginAccount>,
     pub market: Account<'info, Market>,
-    #[account(
-        init,
-        payer = owner,
-        associated_token::mint = mint,
-        associated_token::authority = margin_account
-    )]
-    pub vault: Account<'info, TokenAccount>,
-    pub mint: Account<'info, Mint>,
     pub system_program: Program<'info, System>,
-    pub token_program: Program<'info, Token>,
-    pub associated_token_program: Program<'info, AssociatedToken>,
 }
