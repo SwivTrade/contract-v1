@@ -40,7 +40,6 @@ pub fn open_position(
 
     // Get current price from oracle
     let current_price = get_price_from_oracle(&ctx.accounts.price_update)?;
-    // let current_price = 100_000_000;
 
     // Calculate required collateral
     let position_value = size

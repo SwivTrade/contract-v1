@@ -3,7 +3,6 @@ import { Program } from "@coral-xyz/anchor";
 import { PublicKey, SystemProgram, Keypair } from "@solana/web3.js";
 import { TOKEN_PROGRAM_ID, createMint, createAccount, mintTo, getAssociatedTokenAddress, ASSOCIATED_TOKEN_PROGRAM_ID } from "@solana/spl-token";
 import { assert } from "chai";
-import idl from "../target/idl/contracts.json";
 import { Contracts } from "../target/types/contracts";
 
 describe("contracts", () => {
@@ -21,7 +20,9 @@ describe("contracts", () => {
   const pythPriceUpdate = new PublicKey("6FteNKKPH2WHLr7rP3Z8X6SWsKo2PhCRe6cYx2c2s5wL"); // SOL/USD devnet
 
   // Market setup
-  const marketSymbol = "SOL-PERP";
+  // const marketSymbol = "SOL-PERP";
+  // const marketSymbol = "BTC-PERP";
+  const marketSymbol = "ab-cd";
   const initialFundingRate = 0;
   const fundingInterval = 3600;
   const maintenanceMarginRatio = 500; // 5%
@@ -102,7 +103,7 @@ describe("contracts", () => {
         new anchor.BN(maxLeverage),
         marketBump
       )
-      .accounts({
+      .accountsStrict({
         market: marketPda,
         authority: provider.wallet.publicKey,
         oracleAccount: pythPriceUpdate,
@@ -127,15 +128,11 @@ describe("contracts", () => {
   it("Creates a margin account", async () => {
     await program.methods
       .createMarginAccount(marginAccountBump)
-      .accounts({
+      .accountsStrict({
         owner: wallet.publicKey,
         marginAccount: marginAccountPda,
         market: marketPda,
-        vault: vaultTokenAccount,
-        mint: tokenMint,
         systemProgram: SystemProgram.programId,
-        tokenProgram: TOKEN_PROGRAM_ID,
-        associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
       })
       .rpc();
 
@@ -153,13 +150,15 @@ describe("contracts", () => {
 
     await program.methods
       .depositCollateral(amount)
-      .accounts({
+      .accountsStrict({
         owner: wallet.publicKey,
         marginAccount: marginAccountPda,
         userTokenAccount: userTokenAccount,
         vault: vaultTokenAccount,
         mint: tokenMint,
         tokenProgram: TOKEN_PROGRAM_ID,
+        systemProgram: SystemProgram.programId,
+        associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
       })
       .rpc();
 
@@ -205,7 +204,7 @@ describe("contracts", () => {
 
     await program.methods
       .withdrawCollateral(amount)
-      .accounts({
+      .accountsStrict({
         owner: wallet.publicKey,
         marginAccount: marginAccountPda,
         market: marketPda,

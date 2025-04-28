@@ -10,8 +10,8 @@ pub mod state;
 use instructions::*;
 use state::*;
 
-declare_id!("s2zmrr2SqcwCdeAGRiPFftDSV9CRhXqAbRcMgmh4goC");
-
+// declare_id!("s2zmrr2SqcwCdeAGRiPFftDSV9CRhXqAbRcMgmh4goC");
+declare_id!("2nga8op3u3j7Df7wsQv2n5hkRqjEFLjkWGGAfn4aHsfy");
 
 #[program]
 pub mod contracts {
