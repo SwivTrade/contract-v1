@@ -70,112 +70,19 @@ export type Contracts = {
                     "name": "market";
                 },
                 {
-                    "name": "vault";
-                    "writable": true;
-                    "pda": {
-                        "seeds": [
-                            {
-                                "kind": "account";
-                                "path": "marginAccount";
-                            },
-                            {
-                                "kind": "const";
-                                "value": [
-                                    6,
-                                    221,
-                                    246,
-                                    225,
-                                    215,
-                                    101,
-                                    161,
-                                    147,
-                                    217,
-                                    203,
-                                    225,
-                                    70,
-                                    206,
-                                    235,
-                                    121,
-                                    172,
-                                    28,
-                                    180,
-                                    133,
-                                    237,
-                                    95,
-                                    91,
-                                    55,
-                                    145,
-                                    58,
-                                    140,
-                                    245,
-                                    133,
-                                    126,
-                                    255,
-                                    0,
-                                    169
-                                ];
-                            },
-                            {
-                                "kind": "account";
-                                "path": "mint";
-                            }
-                        ];
-                        "program": {
-                            "kind": "const";
-                            "value": [
-                                140,
-                                151,
-                                37,
-                                143,
-                                78,
-                                36,
-                                137,
-                                241,
-                                187,
-                                61,
-                                16,
-                                41,
-                                20,
-                                142,
-                                13,
-                                131,
-                                11,
-                                90,
-                                19,
-                                153,
-                                218,
-                                255,
-                                16,
-                                132,
-                                4,
-                                142,
-                                123,
-                                216,
-                                219,
-                                233,
-                                248,
-                                89
-                            ];
-                        };
-                    };
-                },
-                {
-                    "name": "mint";
-                },
-                {
                     "name": "systemProgram";
                     "address": "11111111111111111111111111111111";
-                },
-                {
-                    "name": "tokenProgram";
-                    "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";
-                },
-                {
-                    "name": "associatedTokenProgram";
-                    "address": "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL";
                 }
             ];
             "args": [
+                {
+                    "name": "marginType";
+                    "type": {
+                        "defined": {
+                            "name": "marginType";
+                        };
+                    };
+                },
                 {
                     "name": "bump";
                     "type": "u8";
@@ -205,98 +112,15 @@ export type Contracts = {
                     "writable": true;
                 },
                 {
+                    "name": "market";
+                },
+                {
                     "name": "userTokenAccount";
                     "writable": true;
                 },
                 {
-                    "name": "vault";
+                    "name": "marketVault";
                     "writable": true;
-                    "pda": {
-                        "seeds": [
-                            {
-                                "kind": "account";
-                                "path": "marginAccount";
-                            },
-                            {
-                                "kind": "const";
-                                "value": [
-                                    6,
-                                    221,
-                                    246,
-                                    225,
-                                    215,
-                                    101,
-                                    161,
-                                    147,
-                                    217,
-                                    203,
-                                    225,
-                                    70,
-                                    206,
-                                    235,
-                                    121,
-                                    172,
-                                    28,
-                                    180,
-                                    133,
-                                    237,
-                                    95,
-                                    91,
-                                    55,
-                                    145,
-                                    58,
-                                    140,
-                                    245,
-                                    133,
-                                    126,
-                                    255,
-                                    0,
-                                    169
-                                ];
-                            },
-                            {
-                                "kind": "account";
-                                "path": "mint";
-                            }
-                        ];
-                        "program": {
-                            "kind": "const";
-                            "value": [
-                                140,
-                                151,
-                                37,
-                                143,
-                                78,
-                                36,
-                                137,
-                                241,
-                                187,
-                                61,
-                                16,
-                                41,
-                                20,
-                                142,
-                                13,
-                                131,
-                                11,
-                                90,
-                                19,
-                                153,
-                                218,
-                                255,
-                                16,
-                                132,
-                                4,
-                                142,
-                                123,
-                                216,
-                                219,
-                                233,
-                                248,
-                                89
-                            ];
-                        };
-                    };
                 },
                 {
                     "name": "mint";
@@ -304,6 +128,10 @@ export type Contracts = {
                 {
                     "name": "tokenProgram";
                     "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";
+                },
+                {
+                    "name": "systemProgram";
+                    "address": "11111111111111111111111111111111";
                 }
             ];
             "args": [
@@ -356,6 +184,38 @@ export type Contracts = {
                 },
                 {
                     "name": "oracleAccount";
+                },
+                {
+                    "name": "mint";
+                    "docs": [
+                        "The token mint for the market's collateral"
+                    ];
+                },
+                {
+                    "name": "vault";
+                    "writable": true;
+                    "pda": {
+                        "seeds": [
+                            {
+                                "kind": "const";
+                                "value": [
+                                    118,
+                                    97,
+                                    117,
+                                    108,
+                                    116
+                                ];
+                            },
+                            {
+                                "kind": "account";
+                                "path": "market";
+                            }
+                        ];
+                    };
+                },
+                {
+                    "name": "tokenProgram";
+                    "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA";
                 },
                 {
                     "name": "systemProgram";
@@ -438,6 +298,10 @@ export type Contracts = {
                             }
                         ];
                     };
+                },
+                {
+                    "name": "marginAccount";
+                    "writable": true;
                 },
                 {
                     "name": "trader";
@@ -561,94 +425,8 @@ export type Contracts = {
                     "writable": true;
                 },
                 {
-                    "name": "vault";
+                    "name": "marketVault";
                     "writable": true;
-                    "pda": {
-                        "seeds": [
-                            {
-                                "kind": "account";
-                                "path": "marginAccount";
-                            },
-                            {
-                                "kind": "const";
-                                "value": [
-                                    6,
-                                    221,
-                                    246,
-                                    225,
-                                    215,
-                                    101,
-                                    161,
-                                    147,
-                                    217,
-                                    203,
-                                    225,
-                                    70,
-                                    206,
-                                    235,
-                                    121,
-                                    172,
-                                    28,
-                                    180,
-                                    133,
-                                    237,
-                                    95,
-                                    91,
-                                    55,
-                                    145,
-                                    58,
-                                    140,
-                                    245,
-                                    133,
-                                    126,
-                                    255,
-                                    0,
-                                    169
-                                ];
-                            },
-                            {
-                                "kind": "account";
-                                "path": "mint";
-                            }
-                        ];
-                        "program": {
-                            "kind": "const";
-                            "value": [
-                                140,
-                                151,
-                                37,
-                                143,
-                                78,
-                                36,
-                                137,
-                                241,
-                                187,
-                                61,
-                                16,
-                                41,
-                                20,
-                                142,
-                                13,
-                                131,
-                                11,
-                                90,
-                                19,
-                                153,
-                                218,
-                                255,
-                                16,
-                                132,
-                                4,
-                                142,
-                                123,
-                                216,
-                                219,
-                                233,
-                                248,
-                                89
-                            ];
-                        };
-                    };
                 },
                 {
                     "name": "mint";
@@ -1095,6 +873,16 @@ export type Contracts = {
             "code": 6032;
             "name": "invalidPosition";
             "msg": "Invalid position provided";
+        },
+        {
+            "code": 6033;
+            "name": "withdrawalExceedsAvailableMargin";
+            "msg": "Withdrawal exceeds available margin";
+        },
+        {
+            "code": 6034;
+            "name": "invalidVault";
+            "msg": "Invalid vault provided";
         }
     ];
     "types": [
@@ -1208,7 +996,19 @@ export type Contracts = {
                         "type": "pubkey";
                     },
                     {
+                        "name": "marginType";
+                        "type": {
+                            "defined": {
+                                "name": "marginType";
+                            };
+                        };
+                    },
+                    {
                         "name": "collateral";
+                        "type": "u64";
+                    },
+                    {
+                        "name": "allocatedMargin";
                         "type": "u64";
                     },
                     {
@@ -1248,6 +1048,14 @@ export type Contracts = {
                         "type": "pubkey";
                     },
                     {
+                        "name": "marginType";
+                        "type": {
+                            "defined": {
+                                "name": "marginType";
+                            };
+                        };
+                    },
+                    {
                         "name": "timestamp";
                         "type": "i64";
                     }
@@ -1278,6 +1086,20 @@ export type Contracts = {
                     {
                         "name": "newCollateral";
                         "type": "u64";
+                    }
+                ];
+            };
+        },
+        {
+            "name": "marginType";
+            "type": {
+                "kind": "enum";
+                "variants": [
+                    {
+                        "name": "isolated";
+                    },
+                    {
+                        "name": "cross";
                     }
                 ];
             };
@@ -1337,6 +1159,10 @@ export type Contracts = {
                     },
                     {
                         "name": "oracle";
+                        "type": "pubkey";
+                    },
+                    {
+                        "name": "vault";
                         "type": "pubkey";
                     },
                     {
@@ -1694,6 +1520,14 @@ export type Contracts = {
                     {
                         "name": "realizedPnl";
                         "type": "i64";
+                    },
+                    {
+                        "name": "marginType";
+                        "type": {
+                            "defined": {
+                                "name": "marginType";
+                            };
+                        };
                     }
                 ];
             };
@@ -1734,6 +1568,14 @@ export type Contracts = {
                     {
                         "name": "liquidationFee";
                         "type": "u64";
+                    },
+                    {
+                        "name": "marginType";
+                        "type": {
+                            "defined": {
+                                "name": "marginType";
+                            };
+                        };
                     }
                 ];
             };
@@ -1782,6 +1624,14 @@ export type Contracts = {
                     {
                         "name": "liquidationPrice";
                         "type": "u64";
+                    },
+                    {
+                        "name": "marginType";
+                        "type": {
+                            "defined": {
+                                "name": "marginType";
+                            };
+                        };
                     }
                 ];
             };

@@ -3,28 +3,17 @@ import { BN } from '@coral-xyz/anchor';
 
 export interface MarginAccount {
   owner: PublicKey;
-  market: PublicKey;
-  collateralAmount: BN;
-  positions: Position[];
+  perpMarket: PublicKey;
+  collateral: BN;
+  positions: PublicKey[];
+  orders: PublicKey[];
   bump: number;
-}
-
-export interface Position {
-  market: PublicKey;
-  size: BN;
-  entryPrice: BN;
-  leverage: BN;
-  isLong: boolean;
-  liquidationPrice: BN;
-  unrealizedPnL: BN;
-  realizedPnL: BN;
+  marginType: { isolated: {} } | { cross: {} };
 }
 
 export interface CreateMarginAccountParams {
+  marginType: { isolated: {} } | { cross: {} };
   market: PublicKey;
-  bump: number;
-  vault: PublicKey;
-  mint: PublicKey;
 }
 
 export interface DepositCollateralParams {

@@ -16,143 +16,238 @@ var __exportStar = (this && this.__exportStar) || function(m, exports) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.PerpetualSwapSDK = void 0;
 const anchor_1 = require("@coral-xyz/anchor");
+const web3_js_1 = require("@solana/web3.js");
 const spl_token_1 = require("@solana/spl-token");
 const index_1 = require("./idl/index");
 const utils_1 = require("./utils");
+/**
+ * PerpetualSwapSDK - Main SDK class for interacting with the PerpetualSwap protocol
+ *
+ * This SDK is designed to be used in two modes:
+ * 1. Admin mode: Initialized with an admin keypair for admin operations
+ * 2. User mode: Initialized with a connection only, for building transactions for users to sign
+ */
 class PerpetualSwapSDK {
-    constructor(connection, wallet) {
-        const provider = new anchor_1.AnchorProvider(connection, wallet, {
-            commitment: 'confirmed',
-        });
-        this.program = new anchor_1.Program(index_1.IDL, provider);
-        this.provider = provider;
+    /**
+     * Initialize the SDK
+     *
+     * @param connection - Solana connection
+     * @param wallet - Optional wallet for admin operations
+     * @param adminKeypair - Optional admin keypair for admin operations
+     */
+    constructor(connection, wallet, adminKeypair) {
+        // If wallet is provided, we're in admin mode
+        if (wallet) {
+            this.provider = new anchor_1.AnchorProvider(connection, wallet, {
+                commitment: 'confirmed',
+            });
+            this.isAdmin = true;
+            this.adminKeypair = adminKeypair;
+        }
+        else {
+            // If no wallet, we're in user mode (transaction building only)
+            this.provider = new anchor_1.AnchorProvider(connection, new anchor_1.Wallet(web3_js_1.Keypair.generate()), {
+                commitment: 'confirmed',
+            });
+            this.isAdmin = false;
+        }
+        this.program = new anchor_1.Program(index_1.IDL, this.provider);
     }
-    // Market functions
+    /**
+     * Check if the SDK is in admin mode
+     */
+    isAdminMode() {
+        return this.isAdmin;
+    }
+    /**
+     * Get the program instance
+     */
+    getProgram() {
+        return this.program;
+    }
+    /**
+     * Get the provider instance
+     */
+    getProvider() {
+        return this.provider;
+    }
+    // ===== ADMIN OPERATIONS =====
+    /**
+     * Initialize a new market (admin only)
+     */
     async initializeMarket(params) {
-        const [market] = (0, utils_1.findMarketPda)(this.program.programId, params.marketSymbol);
+        if (!this.isAdmin) {
+            throw new Error("This operation requires admin privileges");
+        }
+        const [marketPda, marketBump] = (0, utils_1.findMarketPda)(this.program.programId, params.marketSymbol);
+        const [marketVaultPda, marketVaultBump] = (0, utils_1.findMarketVaultPda)(this.program.programId, marketPda);
         await this.program.methods
-            .initializeMarket(params.marketSymbol, new anchor_1.BN(params.initialFundingRate), new anchor_1.BN(params.fundingInterval), new anchor_1.BN(params.maintenanceMarginRatio), new anchor_1.BN(params.initialMarginRatio), new anchor_1.BN(params.maxLeverage), params.bump)
+            .initializeMarket(params.marketSymbol, new anchor_1.BN(params.initialFundingRate), new anchor_1.BN(params.fundingInterval), new anchor_1.BN(params.maintenanceMarginRatio), new anchor_1.BN(params.initialMarginRatio), new anchor_1.BN(params.maxLeverage), marketBump)
             .accountsStrict({
-            market,
+            market: marketPda,
             authority: this.provider.wallet.publicKey,
             oracleAccount: params.oracleAccount,
-            systemProgram: anchor_1.web3.SystemProgram.programId,
+            mint: params.mint,
+            vault: marketVaultPda,
+            tokenProgram: spl_token_1.TOKEN_PROGRAM_ID,
+            systemProgram: web3_js_1.SystemProgram.programId,
         })
             .rpc();
-        return market;
+        // Fetch and return the market object
+        return await this.getMarket(marketPda);
     }
+    // ===== USER OPERATIONS (TRANSACTION BUILDING) =====
+    /**
+     * Build a transaction to create a margin account
+     */
+    async buildCreateMarginAccountTransaction(params, userPublicKey) {
+        const [marginAccountPda, marginAccountBump] = (0, utils_1.findMarginAccountPda)(this.program.programId, userPublicKey, params.market);
+        const instruction = await this.program.methods
+            .createMarginAccount(params.marginType, marginAccountBump)
+            .accountsStrict({
+            owner: userPublicKey,
+            marginAccount: marginAccountPda,
+            market: params.market,
+            systemProgram: web3_js_1.SystemProgram.programId,
+        })
+            .instruction();
+        const transaction = new web3_js_1.Transaction();
+        transaction.add(instruction);
+        return transaction;
+    }
+    /**
+     * Build a transaction to deposit collateral
+     */
+    async buildDepositCollateralTransaction(params, userPublicKey) {
+        const instruction = await this.program.methods
+            .depositCollateral(new anchor_1.BN(params.amount))
+            .accountsStrict({
+            owner: userPublicKey,
+            marginAccount: params.marginAccount,
+            market: params.market,
+            userTokenAccount: params.userTokenAccount,
+            marketVault: params.vault,
+            mint: params.mint,
+            tokenProgram: spl_token_1.TOKEN_PROGRAM_ID,
+            systemProgram: web3_js_1.SystemProgram.programId,
+        })
+            .instruction();
+        const transaction = new web3_js_1.Transaction();
+        transaction.add(instruction);
+        return transaction;
+    }
+    /**
+     * Build a transaction to withdraw collateral
+     */
+    async buildWithdrawCollateralTransaction(params, userPublicKey) {
+        // Get the position PDA for the user
+        const [positionPda] = (0, utils_1.findPositionPda)(this.program.programId, params.market, userPublicKey);
+        const instruction = await this.program.methods
+            .withdrawCollateral(new anchor_1.BN(params.amount))
+            .accountsStrict({
+            owner: userPublicKey,
+            marginAccount: params.marginAccount,
+            market: params.market,
+            userTokenAccount: params.userTokenAccount,
+            marketVault: params.vault,
+            mint: params.mint,
+            tokenProgram: spl_token_1.TOKEN_PROGRAM_ID,
+        })
+            .remainingAccounts([{ pubkey: positionPda, isWritable: true, isSigner: false }])
+            .instruction();
+        const transaction = new web3_js_1.Transaction();
+        transaction.add(instruction);
+        return transaction;
+    }
+    /**
+     * Build a transaction to open a position
+     */
+    async buildOpenPositionTransaction(params, userPublicKey) {
+        const [positionPda, positionBump] = (0, utils_1.findPositionPda)(this.program.programId, params.market, userPublicKey);
+        // Get the market to find the oracle account
+        const market = await this.program.account.market.fetch(params.market);
+        const oracleAccount = market.oracle;
+        const instruction = await this.program.methods
+            .openPosition(params.side, new anchor_1.BN(params.size), new anchor_1.BN(params.leverage), positionBump)
+            .accountsStrict({
+            market: params.market,
+            position: positionPda,
+            marginAccount: params.marginAccount,
+            trader: userPublicKey,
+            priceUpdate: oracleAccount,
+            systemProgram: web3_js_1.SystemProgram.programId,
+        })
+            .instruction();
+        const transaction = new web3_js_1.Transaction();
+        transaction.add(instruction);
+        return transaction;
+    }
+    /**
+     * Build a transaction to close a position
+     */
+    // async buildClosePositionTransaction(
+    //   params: ClosePositionParams,
+    //   userPublicKey: PublicKey
+    // ): Promise<Transaction> {
+    //   // Get the market to find the oracle account
+    //   const market = await this.program.account.market.fetch(params.market);
+    //   const oracleAccount = market.oracle;
+    //   const instruction = await this.program.methods
+    //     .closePosition(new BN(params.size))
+    //     .accountsStrict({
+    //       authority: this.provider.publicKey,
+    //       marginAccount: params.marginAccount,
+    //       market: params.market,
+    //       position: params.position,
+    //       priceUpdate: oracleAccount,
+    //       systemProgram: SystemProgram.programId,
+    //     })
+    //     .rpc();
+    //   const transaction = new Transaction();
+    //   transaction.add(tx);
+    //   return transaction;
+    // }
+    // ===== READ OPERATIONS =====
+    /**
+     * Get market details
+     */
     async getMarket(marketAddress) {
         return await this.program.account.market.fetch(marketAddress);
     }
-    // Margin Account functions
-    async createMarginAccount(params) {
-        const [marginAccount] = (0, utils_1.findMarginAccountPda)(this.program.programId, this.provider.wallet.publicKey, params.market);
-        await this.program.methods
-            .createMarginAccount(params.bump)
-            .accountsStrict({
-            owner: this.provider.wallet.publicKey,
-            marginAccount,
-            market: params.market,
-            vault: params.vault,
-            mint: params.mint,
-            tokenProgram: spl_token_1.TOKEN_PROGRAM_ID,
-            associatedTokenProgram: spl_token_1.ASSOCIATED_TOKEN_PROGRAM_ID,
-            systemProgram: anchor_1.web3.SystemProgram.programId,
-        })
-            .rpc();
-        return marginAccount;
-    }
+    /**
+     * Get margin account details
+     */
     async getMarginAccount(marginAccountAddress) {
         return await this.program.account.marginAccount.fetch(marginAccountAddress);
     }
-    async depositCollateral(params) {
-        await this.program.methods
-            .depositCollateral(params.amount)
-            .accountsStrict({
-            owner: this.provider.wallet.publicKey,
-            marginAccount: params.marginAccount,
-            userTokenAccount: params.userTokenAccount,
-            vault: params.vault,
-            mint: params.mint,
-            tokenProgram: spl_token_1.TOKEN_PROGRAM_ID,
-        })
-            .rpc();
-    }
-    async withdrawCollateral(params) {
-        await this.program.methods
-            .withdrawCollateral(params.amount)
-            .accountsStrict({
-            owner: this.provider.wallet.publicKey,
-            marginAccount: params.marginAccount,
-            market: params.market,
-            userTokenAccount: params.userTokenAccount,
-            vault: params.vault,
-            mint: params.mint,
-            tokenProgram: spl_token_1.TOKEN_PROGRAM_ID,
-        })
-            .rpc();
-    }
-    // Position methods
+    /**
+     * Get position details
+     */
     async getPosition(positionPda) {
         return await this.program.account.position.fetch(positionPda);
     }
-    // async openPosition(
-    //   marketPda: PublicKey,
-    //   marginAccountPda: PublicKey,
-    //   size: number,
-    //   leverage: number,
-    //   side: 'long' | 'short'
-    // ): Promise<{ positionPda: PublicKey, bump: number }> {
-    //   const [positionPda, bump] = findPositionPda(
-    //     this.program.programId,
-    //     marketPda,
-    //     this.provider.wallet.publicKey
-    //   );
-    //   await this.program.methods
-    //     .openPosition(
-    //       side === 'long' ? { long: {} } : { short: {} },
-    //       new BN(size),
-    //       new BN(leverage),
-    //       bump
-    //     )
-    //     .accounts({
-    //       market: marketPda,
-    //       position: positionPda,
-    //       marginAccount: marginAccountPda,
-    //       trader: this.provider.wallet.publicKey,
-    //       oracleAccount: this.program.account.market.fetch(marketPda).then(m => m.oracle),
-    //       systemProgram: web3.SystemProgram.programId,
-    //     })
-    //     .rpc();
-    //   return { positionPda, bump };
-    // }
-    // async closePosition(
-    //   positionPda: PublicKey,
-    //   marginAccountPda: PublicKey,
-    //   size: number
-    // ): Promise<string> {
-    //   const position = await this.program.account.position.fetch(positionPda);
-    //   const marketPda = position.market;
-    //   await this.program.methods
-    //     .closePosition(new BN(size))
-    //     .accounts({
-    //       market: marketPda,
-    //       position: positionPda,
-    //       marginAccount: marginAccountPda,
-    //       trader: this.provider.wallet.publicKey,
-    //       oracleAccount: this.program.account.market.fetch(marketPda).then(m => m.oracle),
-    //       systemProgram: web3.SystemProgram.programId,
-    //     })
-    //     .rpc();
-    //   return `Position closed: ${positionPda.toString()}`;
-    // }
-    // Utility methods
+    // ===== UTILITY METHODS =====
+    /**
+     * Find the PDA for a market
+     */
     async findMarketPda(marketSymbol) {
         return (0, utils_1.findMarketPda)(this.program.programId, marketSymbol);
     }
+    /**
+     * Find the PDA for a market vault
+     */
+    async findMarketVaultPda(marketPda) {
+        return (0, utils_1.findMarketVaultPda)(this.program.programId, marketPda);
+    }
+    /**
+     * Find the PDA for a margin account
+     */
     async findMarginAccountPda(owner, marketPda) {
         return (0, utils_1.findMarginAccountPda)(this.program.programId, owner, marketPda);
     }
+    /**
+     * Find the PDA for a position
+     */
     async findPositionPda(marketPda, owner) {
         return (0, utils_1.findPositionPda)(this.program.programId, marketPda, owner);
     }
@@ -161,7 +256,6 @@ exports.PerpetualSwapSDK = PerpetualSwapSDK;
 // Export types
 __exportStar(require("./types/market"), exports);
 __exportStar(require("./types/margin-account"), exports);
-// export * from './types/position';
-// export * from './types/contracts';
+__exportStar(require("./types/position"), exports);
 // Export utility functions
 __exportStar(require("./utils"), exports);
