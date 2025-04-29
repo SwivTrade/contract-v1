@@ -67,5 +67,9 @@ pub enum ErrorCode {
     #[msg("Withdrawal amount is too small")]
     WithdrawalTooSmall,
     #[msg("Invalid position provided")]
-    InvalidPosition, // Added this
+    InvalidPosition,
+    #[msg("Withdrawal exceeds available margin")]
+    WithdrawalExceedsAvailableMargin,
+    #[msg("Invalid vault provided")]
+    InvalidVault,
 }

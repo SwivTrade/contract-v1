@@ -1,6 +1,6 @@
 use anchor_lang::prelude::*;
 use pyth_solana_receiver_sdk::price_update::{get_feed_id_from_hex, PriceUpdateV2};
-use crate::{errors::ErrorCode, events::*, {Market, Position, Side}};
+use crate::{errors::ErrorCode, events::*, {Market, Position, Side, MarginAccount, MarginType}};
 
 #[derive(Accounts)]
 #[instruction(side: Side, size: u64, leverage: u64, bump: u8)]
@@ -15,6 +15,12 @@ pub struct OpenPosition<'info> {
         bump
     )]
     pub position: Account<'info, Position>,
+    #[account(
+        mut,
+        constraint = margin_account.owner == trader.key() @ ErrorCode::Unauthorized,
+        constraint = margin_account.perp_market == market.key() @ ErrorCode::InvalidParameter,
+    )]
+    pub margin_account: Account<'info, MarginAccount>,
     #[account(mut)]
     pub trader: Signer<'info>,
     /// CHECK: This is the Pyth price account, validated in get_price_from_oracle
@@ -31,6 +37,7 @@ pub fn open_position(
 ) -> Result<()> {
     let market = &mut ctx.accounts.market;
     let position = &mut ctx.accounts.position;
+    let margin_account = &mut ctx.accounts.margin_account;
     let trader = &ctx.accounts.trader;
 
     // Validate inputs
@@ -59,7 +66,23 @@ pub fn open_position(
 
     require!(required_collateral >= min_required_margin, ErrorCode::InsufficientMargin);
 
-    // TODO: Transfer tokens from trader (requires token program integration)
+    // Check if there's enough available margin based on margin type
+    match margin_account.margin_type {
+        MarginType::Isolated => {
+            // For isolated margin, check if there's enough available margin
+            let available_margin = margin_account.available_margin()?;
+            require!(available_margin >= required_collateral, ErrorCode::InsufficientMargin);
+            
+            // Allocate margin to this position
+            margin_account.allocated_margin = margin_account.allocated_margin
+                .checked_add(required_collateral)
+                .ok_or(ErrorCode::MathOverflow)?;
+        },
+        MarginType::Cross => {
+            // For cross margin, check if total margin is sufficient
+            require!(margin_account.collateral >= required_collateral, ErrorCode::InsufficientMargin);
+        }
+    }
 
     // Initialize position
     let clock = Clock::get()?;
@@ -95,6 +118,9 @@ pub fn open_position(
         }
     }
 
+    // Add position to margin account
+    margin_account.positions.push(position.key());
+
     // Emit event
     emit!(PositionOpenedEvent {
         market: market.key(),
@@ -106,6 +132,7 @@ pub fn open_position(
         entry_price: current_price,
         leverage,
         liquidation_price,
+        margin_type: margin_account.margin_type,
     });
 
     Ok(())
@@ -122,6 +149,12 @@ pub struct ClosePosition<'info> {
         constraint = position.is_open @ ErrorCode::PositionClosed
     )]
     pub position: Account<'info, Position>,
+    #[account(
+        mut,
+        constraint = margin_account.owner == trader.key() @ ErrorCode::Unauthorized,
+        constraint = margin_account.perp_market == market.key() @ ErrorCode::InvalidParameter,
+    )]
+    pub margin_account: Account<'info, MarginAccount>,
     #[account(mut)]
     pub trader: Signer<'info>,
     /// CHECK: This is the Pyth price account, validated in get_price_from_oracle
@@ -131,6 +164,7 @@ pub struct ClosePosition<'info> {
 pub fn close_position(ctx: Context<ClosePosition>) -> Result<()> {
     let market = &mut ctx.accounts.market;
     let position = &mut ctx.accounts.position;
+    let margin_account = &mut ctx.accounts.margin_account;
     let trader = &ctx.accounts.trader;
 
     // Get current price from oracle
@@ -174,13 +208,37 @@ pub fn close_position(ctx: Context<ClosePosition>) -> Result<()> {
     }
 
     // Calculate return amount (collateral + positive PnL, or reduced by negative PnL)
-    let _return_amount = if pnl > 0 {
+    let return_amount = if pnl > 0 {
         position.collateral.checked_add(pnl as u64)
     } else {
         position.collateral.checked_sub((-pnl) as u64)
     }.ok_or(ErrorCode::MathOverflow)?;
 
-    // TODO: Transfer return_amount to trader (requires token program integration)
+    // Update margin account based on margin type
+    match margin_account.margin_type {
+        MarginType::Isolated => {
+            // For isolated margin, release the allocated margin
+            margin_account.allocated_margin = margin_account.allocated_margin
+                .checked_sub(position.collateral)
+                .ok_or(ErrorCode::MathOverflow)?;
+            
+            // Update collateral with PnL
+            margin_account.collateral = margin_account.collateral
+                .checked_add(return_amount)
+                .ok_or(ErrorCode::MathOverflow)?;
+        },
+        MarginType::Cross => {
+            // For cross margin, just update the collateral with PnL
+            margin_account.collateral = margin_account.collateral
+                .checked_add(return_amount)
+                .ok_or(ErrorCode::MathOverflow)?;
+        }
+    }
+
+    // Remove position from margin account's positions list
+    if let Some(pos) = margin_account.positions.iter().position(|&p| p == position.key()) {
+        margin_account.positions.remove(pos);
+    }
 
     // Emit event
     emit!(PositionClosedEvent {
@@ -193,6 +251,7 @@ pub fn close_position(ctx: Context<ClosePosition>) -> Result<()> {
         entry_price: position.entry_price,
         exit_price: current_price,
         realized_pnl: pnl,
+        margin_type: margin_account.margin_type,
     });
 
     Ok(())
@@ -279,6 +338,12 @@ pub struct LiquidatePosition<'info> {
         constraint = position.is_open @ ErrorCode::PositionClosed
     )]
     pub position: Account<'info, Position>,
+    #[account(
+        mut,
+        constraint = margin_account.owner == position.trader @ ErrorCode::Unauthorized,
+        constraint = margin_account.perp_market == market.key() @ ErrorCode::InvalidParameter,
+    )]
+    pub margin_account: Account<'info, MarginAccount>,
     #[account(mut)]
     pub liquidator: Signer<'info>,
     /// CHECK: This is the Pyth price account, validated in get_price_from_oracle
@@ -288,6 +353,7 @@ pub struct LiquidatePosition<'info> {
 pub fn liquidate_position(ctx: Context<LiquidatePosition>) -> Result<()> {
     let market = &mut ctx.accounts.market;
     let position = &mut ctx.accounts.position;
+    let margin_account = &mut ctx.accounts.margin_account;
     let liquidator = &ctx.accounts.liquidator;
 
     // Get current price from oracle
@@ -367,6 +433,32 @@ pub fn liquidate_position(ctx: Context<LiquidatePosition>) -> Result<()> {
         }
     }
 
+    // Update margin account based on margin type
+    match margin_account.margin_type {
+        MarginType::Isolated => {
+            // For isolated margin, release the allocated margin
+            margin_account.allocated_margin = margin_account.allocated_margin
+                .checked_sub(position.collateral)
+                .ok_or(ErrorCode::MathOverflow)?;
+            
+            // Update collateral with unrealized PnL
+            margin_account.collateral = margin_account.collateral
+                .checked_add(unrealized_pnl as u64)
+                .ok_or(ErrorCode::MathOverflow)?;
+        },
+        MarginType::Cross => {
+            // For cross margin, just update the collateral with unrealized PnL
+            margin_account.collateral = margin_account.collateral
+                .checked_add(unrealized_pnl as u64)
+                .ok_or(ErrorCode::MathOverflow)?;
+        }
+    }
+
+    // Remove position from margin account's positions list
+    if let Some(pos) = margin_account.positions.iter().position(|&p| p == position.key()) {
+        margin_account.positions.remove(pos);
+    }
+
     // Emit event
     emit!(PositionLiquidatedEvent {
         market: market.key(),
@@ -377,6 +469,7 @@ pub fn liquidate_position(ctx: Context<LiquidatePosition>) -> Result<()> {
         collateral: position.collateral,
         liquidation_price: current_price,
         liquidation_fee,
+        margin_type: margin_account.margin_type,
     });
 
     Ok(())
