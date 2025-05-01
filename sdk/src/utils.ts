@@ -102,7 +102,7 @@ export function findMarketVaultPda(
 ): [PublicKey, number] {
   return PublicKey.findProgramAddressSync(
     [
-      Buffer.from("market_vault"),
+      Buffer.from("vault"),
       marketPda.toBuffer(),
     ],
     programId
