@@ -1,4 +1,5 @@
 use anchor_lang::prelude::*;
+use anchor_spl::token::{Mint, Token, TokenAccount};
 use crate::{errors::ErrorCode, events::*, Market};
 
 #[derive(Accounts)]
@@ -24,7 +25,19 @@ pub struct InitializeMarket<'info> {
     pub authority: Signer<'info>,
     /// CHECK: This is the Pyth price account, stored in market.oracle
     pub oracle_account: AccountInfo<'info>,
-    pub system_program: Program<'info, System>,
+    /// The token mint for the market's collateral
+    pub mint: Account<'info, Mint>,
+    #[account(
+        init,
+        payer = authority,
+        token::mint = mint,
+        token::authority = market,
+        seeds = [b"vault", market.key().as_ref()],
+        bump
+    )]
+    pub vault: Account<'info, TokenAccount>,
+    pub token_program: Program<'info, Token>,
+    pub system_program: Program<'info, System>
 }
 
 pub fn initialize_market(
@@ -68,6 +81,7 @@ pub fn initialize_market(
     market.insurance_fund = 0;
     market.max_leverage = max_leverage;
     market.oracle = ctx.accounts.oracle_account.key();
+    market.vault = ctx.accounts.vault.key();
     market.is_active = true;
     market.bump = bump;
 

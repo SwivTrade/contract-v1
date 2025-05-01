@@ -33,29 +33,37 @@ const market = await sdk.initializeMarket({
   initialMarginRatio: 1000, // 10%
   maxLeverage: 10,
   oracleAccount: new PublicKey('your-oracle-account'),
-  bump: 0 // This will be calculated
+  mint: new PublicKey('your-token-mint')
 });
 
-// Get market details
-const marketDetails = await sdk.getMarket(market);
+// The market object now contains all market details
+console.log('Market Symbol:', market.marketSymbol);
+console.log('Market Authority:', market.authority.toString());
+console.log('Market Oracle:', market.oracleAccount.toString());
+console.log('Market Vault:', market.vault.toString());
+console.log('Market Bump:', market.bump);
+console.log('Is Active:', market.isActive);
+
+// Get market details (if needed)
+const marketDetails = await sdk.getMarket(market.authority);
 
 // Create a margin account
 const marginAccount = await sdk.createMarginAccount({
-  market: market,
+  market: market.authority,
   bump: 0 // This will be calculated
 });
 
 // Deposit collateral
 await sdk.depositCollateral({
   marginAccount: marginAccount,
-  market: market,
+  market: market.authority,
   amount: new BN(1000000) // 1 token with 6 decimals
 });
 
 // Withdraw collateral
 await sdk.withdrawCollateral({
   marginAccount: marginAccount,
-  market: market,
+  market: market.authority,
   amount: new BN(500000) // 0.5 token with 6 decimals
 });
 ```
@@ -74,12 +82,32 @@ constructor(connection: Connection, wallet: Wallet)
 
 #### Methods
 
-- `initializeMarket(params: InitializeMarketParams): Promise<PublicKey>`
+- `initializeMarket(params: InitializeMarketParams): Promise<Market>` - Returns the complete market object
 - `getMarket(marketAddress: PublicKey): Promise<Market>`
 - `createMarginAccount(params: CreateMarginAccountParams): Promise<PublicKey>`
 - `getMarginAccount(marginAccountAddress: PublicKey): Promise<MarginAccount>`
 - `depositCollateral(params: DepositCollateralParams): Promise<void>`
 - `withdrawCollateral(params: WithdrawCollateralParams): Promise<void>`
+
+### Market Object
+
+The Market object contains the following properties:
+
+```typescript
+interface Market {
+  authority: PublicKey;
+  marketSymbol: string;
+  initialFundingRate: BN;
+  fundingInterval: BN;
+  maintenanceMarginRatio: BN;
+  initialMarginRatio: BN;
+  maxLeverage: BN;
+  oracleAccount: PublicKey;
+  bump: number;
+  isActive: boolean;
+  vault: PublicKey;
+}
+```
 
 ## License
 

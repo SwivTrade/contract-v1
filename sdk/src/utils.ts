@@ -91,4 +91,20 @@ export function formatBN(value: BN, decimals: number): string {
   const fractionalPart = value.mod(divisor);
   
   return `${integerPart.toString()}.${fractionalPart.toString().padStart(decimals, '0')}`;
+}
+
+/**
+ * Find the PDA for a market vault
+ */
+export function findMarketVaultPda(
+  programId: PublicKey,
+  marketPda: PublicKey
+): [PublicKey, number] {
+  return PublicKey.findProgramAddressSync(
+    [
+      Buffer.from("vault"),
+      marketPda.toBuffer(),
+    ],
+    programId
+  );
 } 

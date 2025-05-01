@@ -5,24 +5,40 @@ import { TOKEN_PROGRAM_ID, createMint, createAccount, mintTo, getAssociatedToken
 import { assert } from "chai";
 import { Contracts } from "../target/types/contracts";
 
+// Mock price update implementation
+class MockPriceUpdate {
+  constructor(public price: number = 100) {}
+  
+  // Method to get the current price
+  getPrice(): number {
+    return this.price;
+  }
+  
+  // Method to update the price
+  updatePrice(newPrice: number): void {
+    this.price = newPrice;
+  }
+}
+
 describe("contracts", () => {
   const provider = anchor.AnchorProvider.env();
   anchor.setProvider(provider);
   // const wallet = provider.wallet as anchor.Wallet;
   const wallet = anchor.workspace.Contracts.provider.wallet;
 
-
   // Use the program ID from your Rust file
   // const programId = new PublicKey("s2zmrr2SqcwCdeAGRiPFftDSV9CRhXqAbRcMgmh4goC");
   let program = anchor.workspace.Contracts as Program<Contracts>;
 
-  // Use a devnet Pyth SOL/USD price update feed
-  const pythPriceUpdate = new PublicKey("6FteNKKPH2WHLr7rP3Z8X6SWsKo2PhCRe6cYx2c2s5wL"); // SOL/USD devnet
+  // Create a mock price update instead of using Pyth
+  const mockPriceUpdate = new MockPriceUpdate(100); // Initial price of 100
+  // Create a dummy public key for the mock price update
+  const mockPriceUpdateKey = Keypair.generate().publicKey;
 
   // Market setup
   // const marketSymbol = "SOL-PERP";
   // const marketSymbol = "BTC-PERP";
-  const marketSymbol = "ab-cd";
+  const marketSymbol = "dd-ee";
   const initialFundingRate = 0;
   const fundingInterval = 3600;
   const maintenanceMarginRatio = 500; // 5%
@@ -36,17 +52,24 @@ describe("contracts", () => {
   let positionBump: number;
   let marginAccountPda: PublicKey;
   let marginAccountBump: number;
+  let marketVaultPda: PublicKey;
+  let marketVaultBump: number;
 
   // Token setup
   let tokenMint: PublicKey;
   let userTokenAccount: PublicKey;
-  let vaultTokenAccount: PublicKey;
   const mintAuthority = Keypair.generate();
 
   before(async () => {
     // Initialize market PDA
     [marketPda, marketBump] = PublicKey.findProgramAddressSync(
       [Buffer.from("market"), Buffer.from(marketSymbol)],
+      program.programId
+    );
+
+    // Initialize market vault PDA
+    [marketVaultPda, marketVaultBump] = PublicKey.findProgramAddressSync(
+      [Buffer.from("vault"), marketPda.toBuffer()],
       program.programId
     );
 
@@ -76,11 +99,6 @@ describe("contracts", () => {
       tokenMint,
       wallet.publicKey
     );
-    vaultTokenAccount = await getAssociatedTokenAddress(
-      tokenMint,
-      marginAccountPda,
-      true // allowOwnerOffCurve = true because marketPda is a PDA
-    );
     await mintTo(
       provider.connection,
       wallet.payer,
@@ -106,7 +124,10 @@ describe("contracts", () => {
       .accountsStrict({
         market: marketPda,
         authority: provider.wallet.publicKey,
-        oracleAccount: pythPriceUpdate,
+        oracleAccount: mockPriceUpdateKey, // Use mock price update key
+        mint: tokenMint,
+        vault: marketVaultPda,
+        tokenProgram: TOKEN_PROGRAM_ID,
         systemProgram: anchor.web3.SystemProgram.programId,
       })
       .rpc();
@@ -115,7 +136,7 @@ describe("contracts", () => {
     const marketAccount = await program.account.market.fetch(marketPda);
     assert.equal(marketAccount.marketSymbol, marketSymbol);
     assert.equal(marketAccount.authority.toString(), provider.wallet.publicKey.toString());
-    assert.equal(marketAccount.oracle.toString(), pythPriceUpdate.toString());
+    assert.equal(marketAccount.oracle.toString(), mockPriceUpdateKey.toString()); // Use mock price update key
     assert.equal(marketAccount.fundingRate.toString(), initialFundingRate.toString());
     assert.equal(marketAccount.fundingInterval.toString(), fundingInterval.toString());
     assert.equal(marketAccount.maintenanceMarginRatio.toString(), maintenanceMarginRatio.toString());
@@ -123,11 +144,12 @@ describe("contracts", () => {
     assert.equal(marketAccount.maxLeverage.toString(), maxLeverage.toString());
     assert.equal(marketAccount.bump, marketBump);
     assert.equal(marketAccount.isActive, true);
+    assert.equal(marketAccount.vault.toString(), marketVaultPda.toString());
   });
 
   it("Creates a margin account", async () => {
     await program.methods
-      .createMarginAccount(marginAccountBump)
+      .createMarginAccount({ isolated: {} }, marginAccountBump)
       .accountsStrict({
         owner: wallet.publicKey,
         marginAccount: marginAccountPda,
@@ -143,6 +165,7 @@ describe("contracts", () => {
     assert.equal(marginAccount.positions.length, 0);
     assert.equal(marginAccount.orders.length, 0);
     assert.equal(marginAccount.bump, marginAccountBump);
+    assert.deepEqual(marginAccount.marginType, { isolated: {} });
   });
 
   it("Deposits collateral", async () => {
@@ -153,12 +176,12 @@ describe("contracts", () => {
       .accountsStrict({
         owner: wallet.publicKey,
         marginAccount: marginAccountPda,
+        market: marketPda,
         userTokenAccount: userTokenAccount,
-        vault: vaultTokenAccount,
+        marketVault: marketVaultPda,
         mint: tokenMint,
         tokenProgram: TOKEN_PROGRAM_ID,
         systemProgram: SystemProgram.programId,
-        associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
       })
       .rpc();
 
@@ -176,12 +199,12 @@ describe("contracts", () => {
 
   //   await program.methods
   //     .openPosition(side, size, leverage, positionBump)
-  //     .accounts({
+  //     .accountsStrict({
   //       market: marketPda,
   //       position: positionPda,
   //       marginAccount: marginAccountPda,
   //       trader: wallet.publicKey,
-  //       oracleAccount: pythPriceUpdate,
+  //       priceUpdate: mockPriceUpdateKey, // Use mock price update key
   //       systemProgram: SystemProgram.programId,
   //     })
   //     .rpc();
@@ -209,11 +232,11 @@ describe("contracts", () => {
         marginAccount: marginAccountPda,
         market: marketPda,
         userTokenAccount: userTokenAccount,
-        vault: vaultTokenAccount,
+        marketVault: marketVaultPda,
         mint: tokenMint,
         tokenProgram: TOKEN_PROGRAM_ID,
       })
-      //.remainingAccounts([{ pubkey: positionPda, isWritable: true, isSigner: false }])
+      .remainingAccounts([{ pubkey: positionPda, isWritable: true, isSigner: false }])
       .rpc();
 
     const marginAccount = await program.account.marginAccount.fetch(marginAccountPda);

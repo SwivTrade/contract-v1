@@ -39,8 +39,8 @@ pub mod contracts {
         )
     }
 
-    pub fn create_margin_account(ctx: Context<CreateMarginAccount>, bump: u8) -> Result<()> {
-        instructions::collateral::create_margin_account(ctx, bump)
+    pub fn create_margin_account(ctx: Context<CreateMarginAccount>, margin_type: MarginType, bump: u8) -> Result<()> {
+        instructions::collateral::create_margin_account(ctx, margin_type, bump)
     }
 
     pub fn deposit_collateral(ctx: Context<DepositCollateral>, amount: u64) -> Result<()> {

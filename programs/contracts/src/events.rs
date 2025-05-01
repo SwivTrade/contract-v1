@@ -1,5 +1,5 @@
 use anchor_lang::prelude::*;
-use crate::{Side, OrderType};
+use crate::{Side, OrderType, MarginType};
 
 // Market Events
 #[event]
@@ -65,6 +65,7 @@ pub struct PositionOpenedEvent {
     pub entry_price: u64,
     pub leverage: u64,
     pub liquidation_price: u64,
+    pub margin_type: MarginType,
 }
 
 #[event]
@@ -78,6 +79,7 @@ pub struct PositionClosedEvent {
     pub entry_price: u64,
     pub exit_price: u64,
     pub realized_pnl: i64,
+    pub margin_type: MarginType,
 }
 
 #[event]
@@ -90,6 +92,7 @@ pub struct PositionLiquidatedEvent {
     pub collateral: u64,
     pub liquidation_price: u64,
     pub liquidation_fee: u64,
+    pub margin_type: MarginType,
 }
 
 #[event]
@@ -154,5 +157,6 @@ pub struct MarginAccountCreated {
     pub owner: Pubkey,
     pub margin_account: Pubkey,
     pub market: Pubkey,
+    pub margin_type: MarginType,
     pub timestamp: i64,
 }

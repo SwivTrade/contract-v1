@@ -11,6 +11,8 @@ export interface Market {
   maxLeverage: BN;
   oracleAccount: PublicKey;
   bump: number;
+  isActive: boolean;
+  vault: PublicKey;
 }
 
 export interface InitializeMarketParams {
@@ -21,5 +23,5 @@ export interface InitializeMarketParams {
   initialMarginRatio: number;
   maxLeverage: number;
   oracleAccount: PublicKey;
-  bump: number;
+  mint: PublicKey;
 } 

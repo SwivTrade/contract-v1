@@ -6,6 +6,7 @@ exports.findPositionPda = findPositionPda;
 exports.toBN = toBN;
 exports.fromBN = fromBN;
 exports.formatBN = formatBN;
+exports.findMarketVaultPda = findMarketVaultPda;
 const web3_js_1 = require("@solana/web3.js");
 const anchor_1 = require("@coral-xyz/anchor");
 /**
@@ -72,4 +73,13 @@ function formatBN(value, decimals) {
     const integerPart = value.div(divisor);
     const fractionalPart = value.mod(divisor);
     return `${integerPart.toString()}.${fractionalPart.toString().padStart(decimals, '0')}`;
+}
+/**
+ * Find the PDA for a market vault
+ */
+function findMarketVaultPda(programId, marketPda) {
+    return web3_js_1.PublicKey.findProgramAddressSync([
+        Buffer.from("market_vault"),
+        marketPda.toBuffer(),
+    ], programId);
 }

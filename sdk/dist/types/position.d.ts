@@ -10,3 +10,20 @@ export interface Position {
     isOpen: boolean;
     bump: number;
 }
+export interface OpenPositionParams {
+    market: PublicKey;
+    marginAccount: PublicKey;
+    side: {
+        long: {};
+    } | {
+        short: {};
+    };
+    size: BN;
+    leverage: BN;
+}
+export interface ClosePositionParams {
+    market: PublicKey;
+    position: PublicKey;
+    marginAccount: PublicKey;
+    size: BN;
+}

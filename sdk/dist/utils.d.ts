@@ -42,3 +42,7 @@ export declare function fromBN(value: BN): number;
  * @returns A formatted string
  */
 export declare function formatBN(value: BN, decimals: number): string;
+/**
+ * Find the PDA for a market vault
+ */
+export declare function findMarketVaultPda(programId: PublicKey, marketPda: PublicKey): [PublicKey, number];

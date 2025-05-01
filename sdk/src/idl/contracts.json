@@ -64,112 +64,19 @@
           "name": "market"
         },
         {
-          "name": "vault",
-          "writable": true,
-          "pda": {
-            "seeds": [
-              {
-                "kind": "account",
-                "path": "margin_account"
-              },
-              {
-                "kind": "const",
-                "value": [
-                  6,
-                  221,
-                  246,
-                  225,
-                  215,
-                  101,
-                  161,
-                  147,
-                  217,
-                  203,
-                  225,
-                  70,
-                  206,
-                  235,
-                  121,
-                  172,
-                  28,
-                  180,
-                  133,
-                  237,
-                  95,
-                  91,
-                  55,
-                  145,
-                  58,
-                  140,
-                  245,
-                  133,
-                  126,
-                  255,
-                  0,
-                  169
-                ]
-              },
-              {
-                "kind": "account",
-                "path": "mint"
-              }
-            ],
-            "program": {
-              "kind": "const",
-              "value": [
-                140,
-                151,
-                37,
-                143,
-                78,
-                36,
-                137,
-                241,
-                187,
-                61,
-                16,
-                41,
-                20,
-                142,
-                13,
-                131,
-                11,
-                90,
-                19,
-                153,
-                218,
-                255,
-                16,
-                132,
-                4,
-                142,
-                123,
-                216,
-                219,
-                233,
-                248,
-                89
-              ]
-            }
-          }
-        },
-        {
-          "name": "mint"
-        },
-        {
           "name": "system_program",
           "address": "11111111111111111111111111111111"
-        },
-        {
-          "name": "token_program",
-          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
-        },
-        {
-          "name": "associated_token_program",
-          "address": "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL"
         }
       ],
       "args": [
+        {
+          "name": "margin_type",
+          "type": {
+            "defined": {
+              "name": "MarginType"
+            }
+          }
+        },
         {
           "name": "bump",
           "type": "u8"
@@ -199,98 +106,15 @@
           "writable": true
         },
         {
+          "name": "market"
+        },
+        {
           "name": "user_token_account",
           "writable": true
         },
         {
-          "name": "vault",
-          "writable": true,
-          "pda": {
-            "seeds": [
-              {
-                "kind": "account",
-                "path": "margin_account"
-              },
-              {
-                "kind": "const",
-                "value": [
-                  6,
-                  221,
-                  246,
-                  225,
-                  215,
-                  101,
-                  161,
-                  147,
-                  217,
-                  203,
-                  225,
-                  70,
-                  206,
-                  235,
-                  121,
-                  172,
-                  28,
-                  180,
-                  133,
-                  237,
-                  95,
-                  91,
-                  55,
-                  145,
-                  58,
-                  140,
-                  245,
-                  133,
-                  126,
-                  255,
-                  0,
-                  169
-                ]
-              },
-              {
-                "kind": "account",
-                "path": "mint"
-              }
-            ],
-            "program": {
-              "kind": "const",
-              "value": [
-                140,
-                151,
-                37,
-                143,
-                78,
-                36,
-                137,
-                241,
-                187,
-                61,
-                16,
-                41,
-                20,
-                142,
-                13,
-                131,
-                11,
-                90,
-                19,
-                153,
-                218,
-                255,
-                16,
-                132,
-                4,
-                142,
-                123,
-                216,
-                219,
-                233,
-                248,
-                89
-              ]
-            }
-          }
+          "name": "market_vault",
+          "writable": true
         },
         {
           "name": "mint"
@@ -298,6 +122,10 @@
         {
           "name": "token_program",
           "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
         }
       ],
       "args": [
@@ -350,6 +178,38 @@
         },
         {
           "name": "oracle_account"
+        },
+        {
+          "name": "mint",
+          "docs": [
+            "The token mint for the market's collateral"
+          ]
+        },
+        {
+          "name": "vault",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  118,
+                  97,
+                  117,
+                  108,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "market"
+              }
+            ]
+          }
+        },
+        {
+          "name": "token_program",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
         },
         {
           "name": "system_program",
@@ -432,6 +292,10 @@
               }
             ]
           }
+        },
+        {
+          "name": "margin_account",
+          "writable": true
         },
         {
           "name": "trader",
@@ -555,94 +419,8 @@
           "writable": true
         },
         {
-          "name": "vault",
-          "writable": true,
-          "pda": {
-            "seeds": [
-              {
-                "kind": "account",
-                "path": "margin_account"
-              },
-              {
-                "kind": "const",
-                "value": [
-                  6,
-                  221,
-                  246,
-                  225,
-                  215,
-                  101,
-                  161,
-                  147,
-                  217,
-                  203,
-                  225,
-                  70,
-                  206,
-                  235,
-                  121,
-                  172,
-                  28,
-                  180,
-                  133,
-                  237,
-                  95,
-                  91,
-                  55,
-                  145,
-                  58,
-                  140,
-                  245,
-                  133,
-                  126,
-                  255,
-                  0,
-                  169
-                ]
-              },
-              {
-                "kind": "account",
-                "path": "mint"
-              }
-            ],
-            "program": {
-              "kind": "const",
-              "value": [
-                140,
-                151,
-                37,
-                143,
-                78,
-                36,
-                137,
-                241,
-                187,
-                61,
-                16,
-                41,
-                20,
-                142,
-                13,
-                131,
-                11,
-                90,
-                19,
-                153,
-                218,
-                255,
-                16,
-                132,
-                4,
-                142,
-                123,
-                216,
-                219,
-                233,
-                248,
-                89
-              ]
-            }
-          }
+          "name": "market_vault",
+          "writable": true
         },
         {
           "name": "mint"
@@ -1089,6 +867,16 @@
       "code": 6032,
       "name": "InvalidPosition",
       "msg": "Invalid position provided"
+    },
+    {
+      "code": 6033,
+      "name": "WithdrawalExceedsAvailableMargin",
+      "msg": "Withdrawal exceeds available margin"
+    },
+    {
+      "code": 6034,
+      "name": "InvalidVault",
+      "msg": "Invalid vault provided"
     }
   ],
   "types": [
@@ -1202,7 +990,19 @@
             "type": "pubkey"
           },
           {
+            "name": "margin_type",
+            "type": {
+              "defined": {
+                "name": "MarginType"
+              }
+            }
+          },
+          {
             "name": "collateral",
+            "type": "u64"
+          },
+          {
+            "name": "allocated_margin",
             "type": "u64"
           },
           {
@@ -1242,6 +1042,14 @@
             "type": "pubkey"
           },
           {
+            "name": "margin_type",
+            "type": {
+              "defined": {
+                "name": "MarginType"
+              }
+            }
+          },
+          {
             "name": "timestamp",
             "type": "i64"
           }
@@ -1272,6 +1080,20 @@
           {
             "name": "new_collateral",
             "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "MarginType",
+      "type": {
+        "kind": "enum",
+        "variants": [
+          {
+            "name": "Isolated"
+          },
+          {
+            "name": "Cross"
           }
         ]
       }
@@ -1331,6 +1153,10 @@
           },
           {
             "name": "oracle",
+            "type": "pubkey"
+          },
+          {
+            "name": "vault",
             "type": "pubkey"
           },
           {
@@ -1688,6 +1514,14 @@
           {
             "name": "realized_pnl",
             "type": "i64"
+          },
+          {
+            "name": "margin_type",
+            "type": {
+              "defined": {
+                "name": "MarginType"
+              }
+            }
           }
         ]
       }
@@ -1728,6 +1562,14 @@
           {
             "name": "liquidation_fee",
             "type": "u64"
+          },
+          {
+            "name": "margin_type",
+            "type": {
+              "defined": {
+                "name": "MarginType"
+              }
+            }
           }
         ]
       }
@@ -1776,6 +1618,14 @@
           {
             "name": "liquidation_price",
             "type": "u64"
+          },
+          {
+            "name": "margin_type",
+            "type": {
+              "defined": {
+                "name": "MarginType"
+              }
+            }
           }
         ]
       }

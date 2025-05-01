@@ -1,4 +1,5 @@
 use anchor_lang::prelude::*;
+use crate::errors::ErrorCode;
 
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, PartialEq, Copy)]
 pub enum OrderType {
@@ -12,6 +13,18 @@ pub enum OrderType {
 pub enum Side {
     Long,
     Short,
+}
+
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, PartialEq, Copy)]
+pub enum MarginType {
+    Isolated,
+    Cross,
+}
+
+impl Default for MarginType {
+    fn default() -> Self {
+        MarginType::Isolated
+    }
 }
 
 #[account]
@@ -29,6 +42,7 @@ pub struct Market {
     pub insurance_fund: u64,              // Insurance fund for socialized losses
     pub max_leverage: u64,                // Maximum allowed leverage
     pub oracle: Pubkey,                   // Pyth oracle account for price feed
+    pub vault: Pubkey,                    // Token account that holds all user collateral
     pub is_active: bool,                  // Whether the market is active
     pub bump: u8,                         // PDA bump
 }
@@ -48,6 +62,7 @@ impl Market {
         8 + // insurance_fund: u64
         8 + // max_leverage: u64
         32 + // oracle: Pubkey
+        32 + // vault: Pubkey
         1 + // is_active: bool
         1; // bump: u8
 }
@@ -99,16 +114,28 @@ impl Order {
 pub struct MarginAccount {
     pub owner: Pubkey,
     pub perp_market: Pubkey,
+    pub margin_type: MarginType,  // New field to specify margin type
     pub collateral: u64,
+    pub allocated_margin: u64,    // For isolated margin tracking
     pub orders: Vec<Pubkey>,
     pub positions: Vec<Pubkey>,
     pub bump: u8,
 }
 
 impl MarginAccount {
-    pub const SPACE: usize = 8 + 32 + 32 + 8 + 4 + (32 * 20) + 4 + (32 * 10) + 1;
+    pub const SPACE: usize = 8 + 32 + 32 + 1 + 8 + 8 + 4 + (32 * 20) + 4 + (32 * 10) + 1;
 
     pub fn available_margin(&self) -> Result<u64> {
-        Ok(self.collateral) // Simplified; needs position data for accuracy
+        match self.margin_type {
+            MarginType::Isolated => {
+                // For isolated margin, available margin is total collateral minus allocated margin
+                self.collateral.checked_sub(self.allocated_margin)
+                    .ok_or(ErrorCode::MathOverflow.into())
+            },
+            MarginType::Cross => {
+                // For cross margin, all collateral is available
+                Ok(self.collateral)
+            }
+        }
     }
 }
