@@ -251,6 +251,13 @@ class PerpetualSwapSDK {
     async findPositionPda(marketPda, owner) {
         return (0, utils_1.findPositionPda)(this.program.programId, marketPda, owner);
     }
+    /**
+     * Get all markets from the program
+     */
+    async getAllMarkets() {
+        const markets = await this.program.account.market.all();
+        return markets.map(market => market.account);
+    }
 }
 exports.PerpetualSwapSDK = PerpetualSwapSDK;
 // Export types

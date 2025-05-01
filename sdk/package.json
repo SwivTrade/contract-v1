@@ -1,7 +1,7 @@
 {
   "name": "@swiv-sdk/perpetual-swap-sdk",
-  "version": "0.2.0",
-  "description": "SDK for Solana Perpetual Swap Protocol",
+  "version": "0.2.3",
+  "description": "SDK for Swiv Perpetual Swap Protocol",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "scripts": {
@@ -20,7 +20,7 @@
     "defi",
     "sdk"
   ],
-  "author": "Your Name",
+  "author": "timadigwe",
   "license": "MIT",
   "repository": {
     "type": "git",

@@ -338,6 +338,14 @@ export class PerpetualSwapSDK {
   ): Promise<[PublicKey, number]> {
     return findPositionPda(this.program.programId, marketPda, owner);
   }
+
+  /**
+   * Get all markets from the program
+   */
+  async getAllMarkets(): Promise<Market[]> {
+    const markets = await this.program.account.market.all();
+    return markets.map(market => market.account as unknown as Market);
+  }
 }
 
 // Export types

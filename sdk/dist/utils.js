@@ -79,7 +79,7 @@ function formatBN(value, decimals) {
  */
 function findMarketVaultPda(programId, marketPda) {
     return web3_js_1.PublicKey.findProgramAddressSync([
-        Buffer.from("market_vault"),
+        Buffer.from("vault"),
         marketPda.toBuffer(),
     ], programId);
 }

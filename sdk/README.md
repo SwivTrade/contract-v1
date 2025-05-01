@@ -47,6 +47,10 @@ console.log('Is Active:', market.isActive);
 // Get market details (if needed)
 const marketDetails = await sdk.getMarket(market.authority);
 
+// Get all markets
+const allMarkets = await sdk.getAllMarkets();
+console.log('Available markets:', allMarkets.map(m => m.marketSymbol));
+
 // Create a margin account
 const marginAccount = await sdk.createMarginAccount({
   market: market.authority,
@@ -84,6 +88,7 @@ constructor(connection: Connection, wallet: Wallet)
 
 - `initializeMarket(params: InitializeMarketParams): Promise<Market>` - Returns the complete market object
 - `getMarket(marketAddress: PublicKey): Promise<Market>`
+- `getAllMarkets(): Promise<Market[]>` - Returns all markets in the program
 - `createMarginAccount(params: CreateMarginAccountParams): Promise<PublicKey>`
 - `getMarginAccount(marginAccountAddress: PublicKey): Promise<MarginAccount>`
 - `depositCollateral(params: DepositCollateralParams): Promise<void>`
