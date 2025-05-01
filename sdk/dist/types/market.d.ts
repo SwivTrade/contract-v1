@@ -3,15 +3,20 @@ import { BN } from '@coral-xyz/anchor';
 export interface Market {
     authority: PublicKey;
     marketSymbol: string;
-    initialFundingRate: BN;
+    baseAssetReserve: BN;
+    quoteAssetReserve: BN;
+    fundingRate: BN;
+    lastFundingTime: BN;
     fundingInterval: BN;
     maintenanceMarginRatio: BN;
     initialMarginRatio: BN;
+    feePool: BN;
+    insuranceFund: BN;
     maxLeverage: BN;
-    oracleAccount: PublicKey;
-    bump: number;
-    isActive: boolean;
+    oracle: PublicKey;
     vault: PublicKey;
+    isActive: boolean;
+    bump: number;
 }
 export interface InitializeMarketParams {
     marketSymbol: string;
