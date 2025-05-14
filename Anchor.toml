@@ -5,8 +5,10 @@ anchor_version = "0.30.1"
 resolution = true
 skip-lint = false
 
+
 [programs.localnet]
 contracts = "2nga8op3u3j7Df7wsQv2n5hkRqjEFLjkWGGAfn4aHsfy"
+mock-oracle = "G2EDsqC3igU7f1PgvZgTSLdAMTn9qmwEq7y8Z92hFTCH"
 
 [registry]
 url = "https://api.apr.dev"

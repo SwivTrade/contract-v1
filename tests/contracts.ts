@@ -8,6 +8,9 @@ import { assert } from "chai";
 import { PerpetualSwapSDK } from "../sdk/src/index";
 import * as fs from 'fs';
 import * as path from 'path';
+import { Program } from "@coral-xyz/anchor";
+import { MockOracle } from "../target/types/mock_oracle";
+import mockOracleIdl from "../target/idl/mock_oracle.json";
 
 describe("contracts", () => {
   // Connection setup
@@ -18,7 +21,7 @@ describe("contracts", () => {
   let keypair: Keypair;
   
   // Market setup
-  const marketSymbol = "aae-PERP";
+  const marketSymbol = "abk-PERP";
   const initialFundingRate = 0;
   const fundingInterval = 3600;
   const maintenanceMarginRatio = 500; // 5%
@@ -32,12 +35,14 @@ describe("contracts", () => {
   let marginAccountBump: number;
   let tokenMint: PublicKey;
   let userTokenAccount: PublicKey;
-
   let marketVaultPda: PublicKey;
   let mintAuthority: Keypair;
   let wallet: Wallet;
   let sdk: PerpetualSwapSDK;
   let provider: anchor.AnchorProvider;
+  let mockOracleProgram: Program<MockOracle>;
+  let mockOraclePda: PublicKey;
+  let mockOracleBump: number;
 
   before(async () => {
     // Load or create keypair
@@ -67,6 +72,12 @@ describe("contracts", () => {
 
     // Initialize SDK
     sdk = new PerpetualSwapSDK(connection as any, wallet);
+
+    // Initialize mock oracle program
+    mockOracleProgram = new Program<MockOracle>(
+      mockOracleIdl as MockOracle,
+      provider
+    );
 
     // Setup token accounts
     mintAuthority = Keypair.generate();
@@ -101,6 +112,22 @@ describe("contracts", () => {
       marketPda
     );
 
+    // Initialize mock oracle
+    [mockOraclePda, mockOracleBump] = await PublicKey.findProgramAddress(
+      [Buffer.from("oracle"), Buffer.from(marketSymbol)],
+      mockOracleProgram.programId
+    );
+
+    await mockOracleProgram.methods
+      .initialize(marketSymbol, new BN(1000000000)) // Initial price: 1000.000000
+      .accountsStrict({
+        oracle: mockOraclePda,
+        authority: keypair.publicKey,
+        systemProgram: anchor.web3.SystemProgram.programId,
+      })
+      .signers([keypair])
+      .rpc();
+
     // Mint tokens to user account
     console.log('Minting tokens to user account...');
     await mintTo(
@@ -122,14 +149,14 @@ describe("contracts", () => {
       maintenanceMarginRatio,
       initialMarginRatio,
       maxLeverage,
-      oracleAccount: keypair.publicKey, // Replace with actual oracle account
+      oracleAccount: mockOraclePda,
       mint: tokenMint
     });
 
     // Verify the market was initialized correctly
     assert.equal(market.marketSymbol, marketSymbol);
     assert.equal(market.authority.toString(), keypair.publicKey.toString());
-    assert.equal(market.oracle.toString(), keypair.publicKey.toString());
+    assert.equal(market.oracle.toString(), mockOraclePda.toString());
     assert.equal(market.fundingRate.toString(), initialFundingRate.toString());
     assert.equal(market.fundingInterval.toString(), fundingInterval.toString());
     assert.equal(market.maintenanceMarginRatio.toString(), maintenanceMarginRatio.toString());
@@ -149,7 +176,7 @@ describe("contracts", () => {
     // Send the transaction
     await provider.sendAndConfirm(marginAccount);
 
-    const marginAccountDetails = await sdk.getMarginAccount(marginAccountPda);
+    const marginAccountDetails = await sdk.getMarginAccount(keypair.publicKey, marketPda);
     assert.equal(marginAccountDetails.owner.toString(), keypair.publicKey.toString());
     assert.equal(marginAccountDetails.perpMarket.toString(), marketPda.toString());
     assert.equal(marginAccountDetails.collateral.toNumber(), 0);
@@ -174,7 +201,7 @@ describe("contracts", () => {
     // Send the transaction
     await provider.sendAndConfirm(depositTx);
 
-    const marginAccount = await sdk.getMarginAccount(marginAccountPda);
+    const marginAccount = await sdk.getMarginAccount(keypair.publicKey, marketPda);
     assert.equal(marginAccount.collateral.toNumber(), amount.toNumber());
 
     const userTokenBalance = await connection.getTokenAccountBalance(userTokenAccount);
@@ -184,19 +211,22 @@ describe("contracts", () => {
   it("Withdraws collateral", async () => {
     const amount = new BN(10_000_000); // 10 tokens
 
-    const withdrawTx = await sdk.buildWithdrawCollateralTransaction({
-      marginAccount: marginAccountPda,
-      market: marketPda,
-      userTokenAccount,
-      vault: marketVaultPda,
-      mint: tokenMint,
-      amount
-    }, keypair.publicKey);
+    const withdrawTx = await sdk.buildWithdrawCollateralTransaction(
+      {
+        marginAccount: marginAccountPda,
+        market: marketPda,
+        userTokenAccount,
+        vault: marketVaultPda,
+        mint: tokenMint,
+        amount
+      },
+      keypair.publicKey
+    );
 
-    // Send the transaction
+    // Send transaction
     await provider.sendAndConfirm(withdrawTx);
 
-    const marginAccount = await sdk.getMarginAccount(marginAccountPda);
+    const marginAccount = await sdk.getMarginAccount(keypair.publicKey, marketPda);
     assert.equal(marginAccount.collateral.toNumber(), 40_000_000); // 50 - 10 = 40
 
     const userTokenBalance = await connection.getTokenAccountBalance(userTokenAccount);

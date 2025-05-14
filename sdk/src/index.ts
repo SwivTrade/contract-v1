@@ -184,11 +184,39 @@ export class PerpetualSwapSDK {
     params: WithdrawCollateralParams,
     userPublicKey: PublicKey
   ): Promise<Transaction> {
-    // Get the position PDA for the user
-    const [positionPda] = findPositionPda(
-      this.program.programId,
-      params.market,
-      userPublicKey
+    // Get the margin account data to check for positions
+    const marginAccount = await this.getMarginAccount(userPublicKey, params.market);
+    
+    // If there are no positions, we can proceed without position PDAs
+    if (marginAccount.positions.length === 0) {
+      const instruction = await this.program.methods
+        .withdrawCollateral(new BN(params.amount))
+        .accountsStrict({
+          owner: userPublicKey,
+          marginAccount: params.marginAccount,
+          market: params.market,
+          userTokenAccount: params.userTokenAccount,
+          marketVault: params.vault,
+          mint: params.mint,
+          tokenProgram: TOKEN_PROGRAM_ID,
+        })
+        .instruction();
+
+      const transaction = new Transaction();
+      transaction.add(instruction);
+      return transaction;
+    }
+
+    // If there are positions, get all position PDAs and include them
+    const positionAccounts = await Promise.all(
+      marginAccount.positions.map(async (positionKey) => {
+        const position = await this.getPosition(positionKey);
+        return {
+          pubkey: positionKey,
+          isWritable: true,
+          isSigner: false
+        };
+      })
     );
 
     const instruction = await this.program.methods
@@ -202,13 +230,42 @@ export class PerpetualSwapSDK {
         mint: params.mint,
         tokenProgram: TOKEN_PROGRAM_ID,
       })
-      .remainingAccounts([{ pubkey: positionPda, isWritable: true, isSigner: false }])
+      .remainingAccounts(positionAccounts)
       .instruction();
 
     const transaction = new Transaction();
     transaction.add(instruction);
     
     return transaction;
+  }
+
+  /**
+   * Build an instruction to withdraw collateral
+   */
+  async buildWithdrawCollateralInstruction(
+    params: WithdrawCollateralParams,
+    userPublicKey: PublicKey
+  ): Promise<TransactionInstruction> {
+    // Get the position PDA for the user
+    const [positionPda] = findPositionPda(
+      this.program.programId,
+      params.market,
+      userPublicKey
+    );
+
+    return await this.program.methods
+      .withdrawCollateral(new BN(params.amount))
+      .accountsStrict({
+        owner: userPublicKey,
+        marginAccount: params.marginAccount,
+        market: params.market,
+        userTokenAccount: params.userTokenAccount,
+        marketVault: params.vault,
+        mint: params.mint,
+        tokenProgram: TOKEN_PROGRAM_ID,
+      })
+      //.remainingAccounts([{ pubkey: positionPda, isWritable: true, isSigner: false }])
+      .instruction();
   }
 
   /**
@@ -292,8 +349,12 @@ export class PerpetualSwapSDK {
   /**
    * Get margin account details
    */
-  async getMarginAccount(marginAccountAddress: PublicKey): Promise<MarginAccount> {
-    return await this.program.account.marginAccount.fetch(marginAccountAddress) as unknown as MarginAccount;
+  async getMarginAccount(
+    userPublicKey: PublicKey,
+    marketPda: PublicKey
+  ): Promise<MarginAccount> {
+    const [marginAccountPda] = await this.findMarginAccountPda(userPublicKey, marketPda);
+    return await this.program.account.marginAccount.fetch(marginAccountPda) as unknown as MarginAccount;
   }
 
   /**

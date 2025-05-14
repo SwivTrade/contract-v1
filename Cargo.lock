@@ -1338,6 +1338,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "mock-oracle"
+version = "0.1.0"
+dependencies = [
+ "anchor-lang",
+]
+
+[[package]]
 name = "mpl-token-metadata"
 version = "4.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
