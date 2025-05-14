@@ -6,9 +6,9 @@ declare_id!("G2EDsqC3igU7f1PgvZgTSLdAMTn9qmwEq7y8Z92hFTCH");
 pub mod mock_oracle {
     use super::*;
 
-    pub fn initialize(ctx: Context<Initialize>, _market_symbol: String, price: u64) -> Result<()> {
+    pub fn initialize(ctx: Context<Initialize>, _market_symbol: String, initial_price: u64) -> Result<()> {
         let oracle = &mut ctx.accounts.oracle;
-        oracle.price = price;
+        oracle.price = initial_price;
         oracle.authority = ctx.accounts.authority.key();
         oracle.timestamp = Clock::get()?.unix_timestamp;
         Ok(())

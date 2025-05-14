@@ -69,9 +69,9 @@ pub mod contracts {
         instructions::position::open_position(ctx, side, size, leverage, bump)
     }
 
-    // pub fn close_position(ctx: Context<ClosePosition>) -> Result<()> {
-    //     instructions::position::close_position(ctx)
-    // }
+    pub fn close_position(ctx: Context<ClosePosition>) -> Result<()> {
+        instructions::position::close_position(ctx)
+    }
 
     // pub fn place_limit_order(
     //     ctx: Context<PlaceLimitOrder>,

@@ -1,6 +1,7 @@
 use anchor_lang::prelude::*;
-use pyth_solana_receiver_sdk::price_update::{get_feed_id_from_hex, PriceUpdateV2};
+use mock_oracle::Oracle;
 use crate::{errors::ErrorCode, events::*, {Market, Position, Side, MarginAccount, MarginType}};
+
 
 #[derive(Accounts)]
 #[instruction(side: Side, size: u64, leverage: u64, bump: u8)]
@@ -23,8 +24,8 @@ pub struct OpenPosition<'info> {
     pub margin_account: Account<'info, MarginAccount>,
     #[account(mut)]
     pub trader: Signer<'info>,
-    /// CHECK: This is the Pyth price account, validated in get_price_from_oracle
-    pub price_update: Account<'info, PriceUpdateV2>,
+    /// CHECK: Oracle account - validated in instruction
+    pub price_update: UncheckedAccount<'info>,
     pub system_program: Program<'info, System>,
 }
 
@@ -39,6 +40,7 @@ pub fn open_position(
     let position = &mut ctx.accounts.position;
     let margin_account = &mut ctx.accounts.margin_account;
     let trader = &ctx.accounts.trader;
+    let oracle_account = &ctx.accounts.price_update;
 
     // Validate inputs
     require!(market.is_active, ErrorCode::MarketInactive);
@@ -46,7 +48,9 @@ pub fn open_position(
     require!(size > 0, ErrorCode::InvalidOrderSize);
 
     // Get current price from oracle
-    let current_price = get_price_from_oracle(&ctx.accounts.price_update)?;
+    let oracle_data = oracle_account.try_borrow_data()?;
+    let oracle = Oracle::try_deserialize(&mut oracle_data.as_ref())?;
+    let current_price = oracle.price;
 
     // Calculate required collateral
     let position_value = size
@@ -131,7 +135,7 @@ pub fn open_position(
         collateral: required_collateral,
         entry_price: current_price,
         leverage,
-        liquidation_price,
+        liquidation_price: position.liquidation_price,
         margin_type: margin_account.margin_type,
     });
 
@@ -146,7 +150,8 @@ pub struct ClosePosition<'info> {
         mut,
         has_one = trader,
         has_one = market,
-        constraint = position.is_open @ ErrorCode::PositionClosed
+        constraint = position.is_open @ ErrorCode::PositionClosed,
+        close = trader  // This closes the account and sends rent to trader
     )]
     pub position: Account<'info, Position>,
     #[account(
@@ -157,8 +162,8 @@ pub struct ClosePosition<'info> {
     pub margin_account: Account<'info, MarginAccount>,
     #[account(mut)]
     pub trader: Signer<'info>,
-    /// CHECK: This is the Pyth price account, validated in get_price_from_oracle
-    pub price_update: Account<'info, PriceUpdateV2>,
+    /// CHECK: Oracle account - validated in instruction
+    pub price_update: UncheckedAccount<'info>,
 }
 
 pub fn close_position(ctx: Context<ClosePosition>) -> Result<()> {
@@ -168,7 +173,9 @@ pub fn close_position(ctx: Context<ClosePosition>) -> Result<()> {
     let trader = &ctx.accounts.trader;
 
     // Get current price from oracle
-    let current_price = get_price_from_oracle(&ctx.accounts.price_update)?;
+    let oracle_data = ctx.accounts.price_update.try_borrow_data()?;
+    let oracle = Oracle::try_deserialize(&mut oracle_data.as_ref())?;
+    let current_price = oracle.price;
 
     // Calculate PnL
     let entry_value = position.size
@@ -187,31 +194,32 @@ pub fn close_position(ctx: Context<ClosePosition>) -> Result<()> {
         Side::Short => entry_value_i64.checked_sub(exit_value_i64),
     }.ok_or(ErrorCode::MathOverflow)?;
 
-    // Update position
-    position.is_open = false;
-    position.realized_pnl = position.realized_pnl
-        .checked_add(pnl)
-        .ok_or(ErrorCode::MathOverflow)?;
+    // Store values before position is closed (account will be deleted)
+    let position_side = position.side;
+    let position_size = position.size;
+    let position_collateral = position.collateral;
+    let position_entry_price = position.entry_price;
+    let position_key = position.key();
 
-    // Update market state
-    match position.side {
+    // Update market state BEFORE closing position
+    match position_side {
         Side::Long => {
             market.base_asset_reserve = market.base_asset_reserve
-                .checked_sub(position.size)
+                .checked_sub(position_size)
                 .ok_or(ErrorCode::MathOverflow)?;
         }
         Side::Short => {
             market.base_asset_reserve = market.base_asset_reserve
-                .checked_add(position.size)
+                .checked_add(position_size)
                 .ok_or(ErrorCode::MathOverflow)?;
         }
     }
 
     // Calculate return amount (collateral + positive PnL, or reduced by negative PnL)
     let return_amount = if pnl > 0 {
-        position.collateral.checked_add(pnl as u64)
+        position_collateral.checked_add(pnl as u64)
     } else {
-        position.collateral.checked_sub((-pnl) as u64)
+        position_collateral.checked_sub((-pnl) as u64)
     }.ok_or(ErrorCode::MathOverflow)?;
 
     // Update margin account based on margin type
@@ -219,7 +227,7 @@ pub fn close_position(ctx: Context<ClosePosition>) -> Result<()> {
         MarginType::Isolated => {
             // For isolated margin, release the allocated margin
             margin_account.allocated_margin = margin_account.allocated_margin
-                .checked_sub(position.collateral)
+                .checked_sub(position_collateral)
                 .ok_or(ErrorCode::MathOverflow)?;
             
             // Update collateral with PnL
@@ -236,24 +244,26 @@ pub fn close_position(ctx: Context<ClosePosition>) -> Result<()> {
     }
 
     // Remove position from margin account's positions list
-    if let Some(pos) = margin_account.positions.iter().position(|&p| p == position.key()) {
+    if let Some(pos) = margin_account.positions.iter().position(|&p| p == position_key) {
         margin_account.positions.remove(pos);
     }
 
     // Emit event
     emit!(PositionClosedEvent {
         market: market.key(),
-        position: position.key(),
+        position: position_key,
         trader: trader.key(),
-        side: position.side,
-        size: position.size,
-        collateral: position.collateral,
-        entry_price: position.entry_price,
+        side: position_side,
+        size: position_size,
+        collateral: position_collateral,
+        entry_price: position_entry_price,
         exit_price: current_price,
         realized_pnl: pnl,
         margin_type: margin_account.margin_type,
     });
 
+    // Position account will be automatically closed and rent reclaimed
+    // due to the `close = trader` constraint
     Ok(())
 }
 
@@ -270,8 +280,8 @@ pub struct AdjustPositionMargin<'info> {
     pub position: Account<'info, Position>,
     #[account(mut)]
     pub trader: Signer<'info>,
-    /// CHECK: This is the Pyth price account, validated in get_price_from_oracle
-    pub price_update: Account<'info, PriceUpdateV2>,
+    /// CHECK: Oracle account - validated in instruction
+    pub price_update: UncheckedAccount<'info>,
 }
 
 pub fn adjust_position_margin(
@@ -282,7 +292,9 @@ pub fn adjust_position_margin(
     let position = &mut ctx.accounts.position;
 
     // Calculate current position value
-    let current_price = get_price_from_oracle(&ctx.accounts.price_update)?;
+    let oracle_data = ctx.accounts.price_update.try_borrow_data()?;
+    let oracle = Oracle::try_deserialize(&mut oracle_data.as_ref())?;
+    let current_price = oracle.price;
     let position_value = position.size
         .checked_mul(current_price)
         .ok_or(ErrorCode::MathOverflow)?;
@@ -346,8 +358,8 @@ pub struct LiquidatePosition<'info> {
     pub margin_account: Account<'info, MarginAccount>,
     #[account(mut)]
     pub liquidator: Signer<'info>,
-    /// CHECK: This is the Pyth price account, validated in get_price_from_oracle
-    pub price_update: Account<'info, PriceUpdateV2>,
+    /// CHECK: Oracle account - validated in instruction
+    pub price_update: UncheckedAccount<'info>,
 }
 
 pub fn liquidate_position(ctx: Context<LiquidatePosition>) -> Result<()> {
@@ -357,7 +369,9 @@ pub fn liquidate_position(ctx: Context<LiquidatePosition>) -> Result<()> {
     let liquidator = &ctx.accounts.liquidator;
 
     // Get current price from oracle
-    let current_price = get_price_from_oracle(&ctx.accounts.price_update)?;
+    let oracle_data = ctx.accounts.price_update.try_borrow_data()?;
+    let oracle = Oracle::try_deserialize(&mut oracle_data.as_ref())?;
+    let current_price = oracle.price;
 
     // Calculate position value and equity
     let position_value = position.size
@@ -477,41 +491,45 @@ pub fn liquidate_position(ctx: Context<LiquidatePosition>) -> Result<()> {
 
 // Helper function to calculate liquidation price
 fn calculate_liquidation_price(position: &Position, maintenance_margin_ratio: u64) -> Result<u64> {
+    // For a long position: liquidation_price = entry_price - (collateral / size) * (1 - maintenance_margin_ratio)
+    // For a short position: liquidation_price = entry_price + (collateral / size) * (1 - maintenance_margin_ratio)
+    
+    // Calculate collateral per unit of size
     let collateral_per_unit = position.collateral
-        .checked_mul(10000)
-        .ok_or(ErrorCode::MathOverflow)?
         .checked_div(position.size)
         .ok_or(ErrorCode::MathOverflow)?;
-
+    
+    // Calculate the buffer based on maintenance margin
+    // buffer = collateral_per_unit * (10000 - maintenance_margin_ratio) / 10000
     let buffer = collateral_per_unit
         .checked_mul(10000 - maintenance_margin_ratio)
         .ok_or(ErrorCode::MathOverflow)?
         .checked_div(10000)
         .ok_or(ErrorCode::MathOverflow)?;
-
+    
     let liquidation_price = match position.side {
         Side::Long => position.entry_price.checked_sub(buffer),
         Side::Short => position.entry_price.checked_add(buffer),
     }.ok_or(ErrorCode::MathOverflow)?;
-
+    
     Ok(liquidation_price)
 }
 
 // Helper function to get price from Pyth oracle
-fn get_price_from_oracle(price_update: &Account<PriceUpdateV2>) -> Result<u64> {
-    let feed_id = get_feed_id_from_hex("0xef0d8b6fda2ceba41da15d4095d1da392a0d2f8ed0c6c7bc0f4cfac8c280b56d")
-        .map_err(|_| error!(ErrorCode::InvalidOracleAccount))?;
+// fn get_price_from_oracle(price_update: &Account<PriceUpdateV2>) -> Result<u64> {
+//     let feed_id = get_feed_id_from_hex("0xef0d8b6fda2ceba41da15d4095d1da392a0d2f8ed0c6c7bc0f4cfac8c280b56d")
+//         .map_err(|_| error!(ErrorCode::InvalidOracleAccount))?;
 
-    let current_clock = Clock::get()?; // Do not extract `unix_timestamp` yet
+//     let current_clock = Clock::get()?; // Do not extract `unix_timestamp` yet
 
-    // Pass the entire `current_clock` reference instead of `current_clock.unix_timestamp`
-    let price_data = price_update
-        .get_price_no_older_than(&current_clock, 60, &feed_id)
-        .map_err(|_| ErrorCode::StaleOraclePrice)?;
+//     // Pass the entire `current_clock` reference instead of `current_clock.unix_timestamp`
+//     let price_data = price_update
+//         .get_price_no_older_than(&current_clock, 60, &feed_id)
+//         .map_err(|_| ErrorCode::StaleOraclePrice)?;
 
-    let conf_interval = price_data.conf as f64 / price_data.price as f64;
-    require!(conf_interval <= 0.01, ErrorCode::PriceConfidenceTooLow);
+//     let conf_interval = price_data.conf as f64 / price_data.price as f64;
+//     require!(conf_interval <= 0.01, ErrorCode::PriceConfidenceTooLow);
 
-    let price_u64 = (price_data.price as f64 * 1_000_000f64) as u64;
-    Ok(price_u64)
-}
+//     let price_u64 = (price_data.price as f64 * 1_000_000f64) as u64;
+//     Ok(price_u64)
+// }

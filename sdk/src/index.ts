@@ -6,13 +6,17 @@ import { IDL } from "./idl/index"
 
 import { Market, InitializeMarketParams } from './types/market';
 import { MarginAccount, CreateMarginAccountParams, DepositCollateralParams, WithdrawCollateralParams } from './types/margin-account';
-import { Position, OpenPositionParams, ClosePositionParams } from './types/position';
+import { Position, OpenPositionParams, ClosePositionParams, Side } from './types/position';
 import { 
   findMarketPda,
   findMarginAccountPda,
   findPositionPda,
   findMarketVaultPda
 } from './utils';
+
+import { MockOracle } from "./idl/mock_oracle";
+import mockOracleIdl from './idl/mock_oracle.json';
+import { Oracle, InitializeOracleParams, UpdateOracleParams } from './types/oracle';
 
 /**
  * PerpetualSwapSDK - Main SDK class for interacting with the PerpetualSwap protocol
@@ -23,6 +27,7 @@ import {
  */
 export class PerpetualSwapSDK {
   private program: Program<Contracts>;
+  private oracleProgram: Program<MockOracle>;
   private provider: AnchorProvider;
   private isAdmin: boolean;
   private adminKeypair?: Keypair;
@@ -58,6 +63,11 @@ export class PerpetualSwapSDK {
       IDL as Contracts,
       this.provider
     );
+
+    this.oracleProgram = new Program<MockOracle>(
+      mockOracleIdl as MockOracle,
+      this.provider
+    );
   }
 
   /**
@@ -72,6 +82,13 @@ export class PerpetualSwapSDK {
    */
   public getProgram(): Program<Contracts> {
     return this.program;
+  }
+
+  /**
+   * Get the oracle program instance
+   */
+  public getOracleProgram(): Program<MockOracle> {
+    return this.oracleProgram;
   }
 
   /**
@@ -117,6 +134,67 @@ export class PerpetualSwapSDK {
 
     // Fetch and return the market object
     return await this.getMarket(marketPda);
+  }
+
+  // ===== ORACLE OPERATIONS =====
+
+  /**
+   * Initialize a mock oracle (admin only)
+   */
+  async initializeOracle(params: InitializeOracleParams): Promise<PublicKey> {
+    if (!this.isAdmin) {
+      throw new Error("This operation requires admin privileges");
+    }
+
+    const [oraclePda, oracleBump] = await this.findOraclePda(params.marketSymbol);
+
+    await this.oracleProgram.methods
+      .initialize(params.marketSymbol, new BN(params.initialPrice))
+      .accountsStrict({
+        oracle: oraclePda,
+        authority: this.provider.wallet.publicKey,
+        systemProgram: SystemProgram.programId,
+      })
+      .rpc();
+
+    return oraclePda;
+  }
+
+  /**
+   * Update oracle price (admin only)
+   */
+  async updateOraclePrice(params: UpdateOracleParams): Promise<void> {
+    if (!this.isAdmin) {
+      throw new Error("This operation requires admin privileges");
+    }
+
+    const [oraclePda] = await this.findOraclePda(params.marketSymbol);
+
+    await this.oracleProgram.methods
+      .updatePrice(new BN(params.newPrice))
+      .accountsStrict({
+        oracle: oraclePda,
+        authority: this.provider.wallet.publicKey,
+      })
+      .rpc();
+  }
+
+  /**
+   * Get oracle data
+   */
+  async getOracle(marketSymbol: string): Promise<Oracle> {
+    const [oraclePda] = await this.findOraclePda(marketSymbol);
+    return await this.oracleProgram.account.oracle.fetch(oraclePda) as unknown as Oracle;
+  }
+
+  /**
+   * Find the PDA for an oracle
+   */
+  async findOraclePda(marketSymbol: string): Promise<[PublicKey, number]> {
+    return await PublicKey.findProgramAddress(
+      [Buffer.from("oracle"), Buffer.from(marketSymbol)],
+      this.oracleProgram.programId
+    );
   }
 
   // ===== USER OPERATIONS (TRANSACTION BUILDING) =====
@@ -240,64 +318,25 @@ export class PerpetualSwapSDK {
   }
 
   /**
-   * Build an instruction to withdraw collateral
-   */
-  async buildWithdrawCollateralInstruction(
-    params: WithdrawCollateralParams,
-    userPublicKey: PublicKey
-  ): Promise<TransactionInstruction> {
-    // Get the position PDA for the user
-    const [positionPda] = findPositionPda(
-      this.program.programId,
-      params.market,
-      userPublicKey
-    );
-
-    return await this.program.methods
-      .withdrawCollateral(new BN(params.amount))
-      .accountsStrict({
-        owner: userPublicKey,
-        marginAccount: params.marginAccount,
-        market: params.market,
-        userTokenAccount: params.userTokenAccount,
-        marketVault: params.vault,
-        mint: params.mint,
-        tokenProgram: TOKEN_PROGRAM_ID,
-      })
-      //.remainingAccounts([{ pubkey: positionPda, isWritable: true, isSigner: false }])
-      .instruction();
-  }
-
-  /**
    * Build a transaction to open a position
    */
   async buildOpenPositionTransaction(
     params: OpenPositionParams,
     userPublicKey: PublicKey
   ): Promise<Transaction> {
-    const [positionPda, positionBump] = findPositionPda(
-      this.program.programId,
+    const [positionPda, positionBump] = await this.findPositionPda(
       params.market,
       userPublicKey
     );
 
-    // Get the market to find the oracle account
-    const market = await this.program.account.market.fetch(params.market);
-    const oracleAccount = market.oracle;
-
     const instruction = await this.program.methods
-      .openPosition(
-        params.side,
-        new BN(params.size),
-        new BN(params.leverage),
-        positionBump
-      )
+      .openPosition(params.side, params.size, params.leverage, positionBump)
       .accountsStrict({
         market: params.market,
         position: positionPda,
         marginAccount: params.marginAccount,
         trader: userPublicKey,
-        priceUpdate: oracleAccount,
+        priceUpdate: params.oracleAccount,
         systemProgram: SystemProgram.programId,
       })
       .instruction();
@@ -311,31 +350,26 @@ export class PerpetualSwapSDK {
   /**
    * Build a transaction to close a position
    */
-  // async buildClosePositionTransaction(
-  //   params: ClosePositionParams,
-  //   userPublicKey: PublicKey
-  // ): Promise<Transaction> {
-  //   // Get the market to find the oracle account
-  //   const market = await this.program.account.market.fetch(params.market);
-  //   const oracleAccount = market.oracle;
+  async buildClosePositionTransaction(
+    params: ClosePositionParams,
+    userPublicKey: PublicKey
+  ): Promise<Transaction> {
+    const instruction = await this.program.methods
+      .closePosition()
+      .accountsStrict({
+        market: params.market,
+        position: params.position,
+        marginAccount: params.marginAccount,
+        trader: userPublicKey,
+        priceUpdate: params.oracleAccount,
+      })
+      .instruction();
 
-  //   const instruction = await this.program.methods
-  //     .closePosition(new BN(params.size))
-  //     .accountsStrict({
-  //       authority: this.provider.publicKey,
-  //       marginAccount: params.marginAccount,
-  //       market: params.market,
-  //       position: params.position,
-  //       priceUpdate: oracleAccount,
-  //       systemProgram: SystemProgram.programId,
-  //     })
-  //     .rpc();
-
-  //   const transaction = new Transaction();
-  //   transaction.add(tx);
+    const transaction = new Transaction();
+    transaction.add(instruction);
     
-  //   return transaction;
-  // }
+    return transaction;
+  }
 
   // ===== READ OPERATIONS =====
 
@@ -415,4 +449,7 @@ export * from './types/margin-account';
 export * from './types/position';
 
 // Export utility functions
-export * from './utils'; 
+export * from './utils';
+
+// Export oracle types
+export * from './types/oracle'; 
