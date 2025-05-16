@@ -3,7 +3,9 @@ import { PublicKey, Transaction, Keypair } from '@solana/web3.js';
 import type { Contracts } from "./idl/index";
 import { Market, InitializeMarketParams } from './types/market';
 import { MarginAccount, CreateMarginAccountParams, DepositCollateralParams, WithdrawCollateralParams } from './types/margin-account';
-import { Position, OpenPositionParams } from './types/position';
+import { Position, OpenPositionParams, ClosePositionParams } from './types/position';
+import { MockOracle } from "./idl/mock_oracle";
+import { Oracle, InitializeOracleParams, UpdateOracleParams } from './types/oracle';
 /**
  * PerpetualSwapSDK - Main SDK class for interacting with the PerpetualSwap protocol
  *
@@ -13,6 +15,7 @@ import { Position, OpenPositionParams } from './types/position';
  */
 export declare class PerpetualSwapSDK {
     private program;
+    private oracleProgram;
     private provider;
     private isAdmin;
     private adminKeypair?;
@@ -33,6 +36,10 @@ export declare class PerpetualSwapSDK {
      */
     getProgram(): Program<Contracts>;
     /**
+     * Get the oracle program instance
+     */
+    getOracleProgram(): Program<MockOracle>;
+    /**
      * Get the provider instance
      */
     getProvider(): AnchorProvider;
@@ -40,6 +47,22 @@ export declare class PerpetualSwapSDK {
      * Initialize a new market (admin only)
      */
     initializeMarket(params: InitializeMarketParams): Promise<Market>;
+    /**
+     * Initialize a mock oracle (admin only)
+     */
+    initializeOracle(params: InitializeOracleParams): Promise<PublicKey>;
+    /**
+     * Update oracle price (admin only)
+     */
+    updateOraclePrice(params: UpdateOracleParams): Promise<void>;
+    /**
+     * Get oracle data
+     */
+    getOracle(marketSymbol: string): Promise<Oracle>;
+    /**
+     * Find the PDA for an oracle
+     */
+    findOraclePda(marketSymbol: string): Promise<[PublicKey, number]>;
     /**
      * Build a transaction to create a margin account
      */
@@ -59,6 +82,7 @@ export declare class PerpetualSwapSDK {
     /**
      * Build a transaction to close a position
      */
+    buildClosePositionTransaction(params: ClosePositionParams, userPublicKey: PublicKey): Promise<Transaction>;
     /**
      * Get market details
      */
@@ -66,7 +90,7 @@ export declare class PerpetualSwapSDK {
     /**
      * Get margin account details
      */
-    getMarginAccount(marginAccountAddress: PublicKey): Promise<MarginAccount>;
+    getMarginAccount(userPublicKey: PublicKey, marketPda: PublicKey): Promise<MarginAccount>;
     /**
      * Get position details
      */
@@ -96,3 +120,4 @@ export * from './types/market';
 export * from './types/margin-account';
 export * from './types/position';
 export * from './utils';
+export * from './types/oracle';

@@ -1,0 +1,141 @@
+{
+    "address": "G2EDsqC3igU7f1PgvZgTSLdAMTn9qmwEq7y8Z92hFTCH",
+    "metadata": {
+        "name": "mock_oracle",
+        "version": "0.1.0",
+        "spec": "0.1.0",
+        "description": "Created with Anchor"
+    },
+    "instructions": [
+        {
+            "name": "initialize",
+            "discriminator": [
+                175,
+                175,
+                109,
+                31,
+                13,
+                152,
+                155,
+                237
+            ],
+            "accounts": [
+                {
+                    "name": "oracle",
+                    "writable": true,
+                    "pda": {
+                        "seeds": [
+                            {
+                                "kind": "const",
+                                "value": [
+                                    111,
+                                    114,
+                                    97,
+                                    99,
+                                    108,
+                                    101
+                                ]
+                            },
+                            {
+                                "kind": "arg",
+                                "path": "market_symbol"
+                            }
+                        ]
+                    }
+                },
+                {
+                    "name": "authority",
+                    "writable": true,
+                    "signer": true
+                },
+                {
+                    "name": "system_program",
+                    "address": "11111111111111111111111111111111"
+                }
+            ],
+            "args": [
+                {
+                    "name": "_market_symbol",
+                    "type": "string"
+                },
+                {
+                    "name": "price",
+                    "type": "u64"
+                }
+            ]
+        },
+        {
+            "name": "update_price",
+            "discriminator": [
+                61,
+                34,
+                117,
+                155,
+                75,
+                34,
+                123,
+                208
+            ],
+            "accounts": [
+                {
+                    "name": "oracle",
+                    "writable": true
+                },
+                {
+                    "name": "authority",
+                    "signer": true
+                }
+            ],
+            "args": [
+                {
+                    "name": "new_price",
+                    "type": "u64"
+                }
+            ]
+        }
+    ],
+    "accounts": [
+        {
+            "name": "Oracle",
+            "discriminator": [
+                139,
+                194,
+                131,
+                179,
+                140,
+                179,
+                229,
+                244
+            ]
+        }
+    ],
+    "errors": [
+        {
+            "code": 6000,
+            "name": "Unauthorized",
+            "msg": "Unauthorized"
+        }
+    ],
+    "types": [
+        {
+            "name": "Oracle",
+            "type": {
+                "kind": "struct",
+                "fields": [
+                    {
+                        "name": "price",
+                        "type": "u64"
+                    },
+                    {
+                        "name": "authority",
+                        "type": "pubkey"
+                    },
+                    {
+                        "name": "timestamp",
+                        "type": "i64"
+                    }
+                ]
+            }
+        }
+    ]
+}

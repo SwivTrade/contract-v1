@@ -70,7 +70,7 @@ pub fn initialize_market(
     // Initialize market
     market.authority = authority.key();
     market.market_symbol = market_symbol.clone();
-    market.base_asset_reserve = 0;
+    market.base_asset_reserve = 1_000_000_000; // Start with 1 billion base units
     market.quote_asset_reserve = 0;
     market.funding_rate = initial_funding_rate;
     market.last_funding_time = clock.unix_timestamp;

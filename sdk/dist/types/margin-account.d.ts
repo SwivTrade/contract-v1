@@ -3,15 +3,16 @@ import { BN } from '@coral-xyz/anchor';
 export interface MarginAccount {
     owner: PublicKey;
     perpMarket: PublicKey;
-    collateral: BN;
-    positions: PublicKey[];
-    orders: PublicKey[];
-    bump: number;
     marginType: {
         isolated: {};
     } | {
         cross: {};
     };
+    collateral: BN;
+    allocatedMargin: BN;
+    positions: PublicKey[];
+    orders: PublicKey[];
+    bump: number;
 }
 export interface CreateMarginAccountParams {
     marginType: {

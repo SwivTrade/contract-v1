@@ -11,7 +11,9 @@ import * as path from 'path';
 
 describe("Contract Tests", () => {
   // Connection setup
-  const connection = new Connection('https://api.testnet.sonic.game/', 'confirmed');
+  // Previous testnet configuration
+  // const connection = new Connection('https://api.testnet.sonic.game/', 'confirmed');
+  const connection = new Connection('https://api.devnet.solana.com', 'confirmed');
   
   // Keypair setup
   const keypairPath = path.join(__dirname, 'keypair.json');
@@ -19,7 +21,7 @@ describe("Contract Tests", () => {
   let keypair: Keypair;
 
   // Market setup
-  const marketSymbol = "llama-PERP";
+  const marketSymbol = "mem-PERP";
   const initialFundingRate = 0;
   const fundingInterval = 3600;
   const maintenanceMarginRatio = 500; // 5%

@@ -53,8 +53,16 @@ pub fn open_position(
     let current_price = oracle.price;
 
     // Calculate required collateral
+    // Scale price by 1e6 to match token decimals
+    let scaled_price = current_price
+        .checked_mul(1_000_000)
+        .ok_or(ErrorCode::MathOverflow)?;
+
+    // Calculate position value with proper decimal handling
     let position_value = size
-        .checked_mul(current_price)
+        .checked_mul(scaled_price)
+        .ok_or(ErrorCode::MathOverflow)?
+        .checked_div(1_000_000)  // Divide by 1e6 to get back to token decimals
         .ok_or(ErrorCode::MathOverflow)?;
 
     let required_collateral = position_value
@@ -109,6 +117,7 @@ pub fn open_position(
     position.liquidation_price = liquidation_price;
 
     // Update market state
+    msg!("Before market update - base_asset_reserve: {}", market.base_asset_reserve);
     match side {
         Side::Long => {
             market.base_asset_reserve = market.base_asset_reserve
@@ -121,6 +130,7 @@ pub fn open_position(
                 .ok_or(ErrorCode::MathOverflow)?;
         }
     }
+    msg!("After market update - base_asset_reserve: {}", market.base_asset_reserve);
 
     // Add position to margin account
     margin_account.positions.push(position.key());
@@ -202,6 +212,7 @@ pub fn close_position(ctx: Context<ClosePosition>) -> Result<()> {
     let position_key = position.key();
 
     // Update market state BEFORE closing position
+    msg!("Before market update - base_asset_reserve: {}", market.base_asset_reserve);
     match position_side {
         Side::Long => {
             market.base_asset_reserve = market.base_asset_reserve
@@ -214,13 +225,7 @@ pub fn close_position(ctx: Context<ClosePosition>) -> Result<()> {
                 .ok_or(ErrorCode::MathOverflow)?;
         }
     }
-
-    // Calculate return amount (collateral + positive PnL, or reduced by negative PnL)
-    let return_amount = if pnl > 0 {
-        position_collateral.checked_add(pnl as u64)
-    } else {
-        position_collateral.checked_sub((-pnl) as u64)
-    }.ok_or(ErrorCode::MathOverflow)?;
+    msg!("After market update - base_asset_reserve: {}", market.base_asset_reserve);
 
     // Update margin account based on margin type
     match margin_account.margin_type {
@@ -230,16 +235,28 @@ pub fn close_position(ctx: Context<ClosePosition>) -> Result<()> {
                 .checked_sub(position_collateral)
                 .ok_or(ErrorCode::MathOverflow)?;
             
-            // Update collateral with PnL
-            margin_account.collateral = margin_account.collateral
-                .checked_add(return_amount)
-                .ok_or(ErrorCode::MathOverflow)?;
+            // Only add/subtract the PnL to collateral
+            if pnl > 0 {
+                margin_account.collateral = margin_account.collateral
+                    .checked_add(pnl as u64)
+                    .ok_or(ErrorCode::MathOverflow)?;
+            } else {
+                margin_account.collateral = margin_account.collateral
+                    .checked_sub((-pnl) as u64)
+                    .ok_or(ErrorCode::MathOverflow)?;
+            }
         },
         MarginType::Cross => {
-            // For cross margin, just update the collateral with PnL
-            margin_account.collateral = margin_account.collateral
-                .checked_add(return_amount)
-                .ok_or(ErrorCode::MathOverflow)?;
+            // For cross margin, just add/subtract the PnL to collateral
+            if pnl > 0 {
+                margin_account.collateral = margin_account.collateral
+                    .checked_add(pnl as u64)
+                    .ok_or(ErrorCode::MathOverflow)?;
+            } else {
+                margin_account.collateral = margin_account.collateral
+                    .checked_sub((-pnl) as u64)
+                    .ok_or(ErrorCode::MathOverflow)?;
+            }
         }
     }
 
@@ -434,6 +451,7 @@ pub fn liquidate_position(ctx: Context<LiquidatePosition>) -> Result<()> {
         .ok_or(ErrorCode::MathOverflow)?;
 
     // Update market state
+    msg!("Before market update - base_asset_reserve: {}", market.base_asset_reserve);
     match position.side {
         Side::Long => {
             market.base_asset_reserve = market.base_asset_reserve
@@ -446,6 +464,7 @@ pub fn liquidate_position(ctx: Context<LiquidatePosition>) -> Result<()> {
                 .ok_or(ErrorCode::MathOverflow)?;
         }
     }
+    msg!("After market update - base_asset_reserve: {}", market.base_asset_reserve);
 
     // Update margin account based on margin type
     match margin_account.margin_type {

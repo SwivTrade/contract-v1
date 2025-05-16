@@ -13,6 +13,9 @@ var __createBinding = (this && this.__createBinding) || (Object.create ? (functi
 var __exportStar = (this && this.__exportStar) || function(m, exports) {
     for (var p in m) if (p !== "default" && !Object.prototype.hasOwnProperty.call(exports, p)) __createBinding(exports, m, p);
 };
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.PerpetualSwapSDK = void 0;
 const anchor_1 = require("@coral-xyz/anchor");
@@ -20,6 +23,7 @@ const web3_js_1 = require("@solana/web3.js");
 const spl_token_1 = require("@solana/spl-token");
 const index_1 = require("./idl/index");
 const utils_1 = require("./utils");
+const mock_oracle_json_1 = __importDefault(require("./idl/mock_oracle.json"));
 /**
  * PerpetualSwapSDK - Main SDK class for interacting with the PerpetualSwap protocol
  *
@@ -52,6 +56,7 @@ class PerpetualSwapSDK {
             this.isAdmin = false;
         }
         this.program = new anchor_1.Program(index_1.IDL, this.provider);
+        this.oracleProgram = new anchor_1.Program(mock_oracle_json_1.default, this.provider);
     }
     /**
      * Check if the SDK is in admin mode
@@ -64,6 +69,12 @@ class PerpetualSwapSDK {
      */
     getProgram() {
         return this.program;
+    }
+    /**
+     * Get the oracle program instance
+     */
+    getOracleProgram() {
+        return this.oracleProgram;
     }
     /**
      * Get the provider instance
@@ -95,6 +106,54 @@ class PerpetualSwapSDK {
             .rpc();
         // Fetch and return the market object
         return await this.getMarket(marketPda);
+    }
+    // ===== ORACLE OPERATIONS =====
+    /**
+     * Initialize a mock oracle (admin only)
+     */
+    async initializeOracle(params) {
+        if (!this.isAdmin) {
+            throw new Error("This operation requires admin privileges");
+        }
+        const [oraclePda, oracleBump] = await this.findOraclePda(params.marketSymbol);
+        await this.oracleProgram.methods
+            .initialize(params.marketSymbol, new anchor_1.BN(params.initialPrice))
+            .accountsStrict({
+            oracle: oraclePda,
+            authority: this.provider.wallet.publicKey,
+            systemProgram: web3_js_1.SystemProgram.programId,
+        })
+            .rpc();
+        return oraclePda;
+    }
+    /**
+     * Update oracle price (admin only)
+     */
+    async updateOraclePrice(params) {
+        if (!this.isAdmin) {
+            throw new Error("This operation requires admin privileges");
+        }
+        const [oraclePda] = await this.findOraclePda(params.marketSymbol);
+        await this.oracleProgram.methods
+            .updatePrice(new anchor_1.BN(params.newPrice))
+            .accountsStrict({
+            oracle: oraclePda,
+            authority: this.provider.wallet.publicKey,
+        })
+            .rpc();
+    }
+    /**
+     * Get oracle data
+     */
+    async getOracle(marketSymbol) {
+        const [oraclePda] = await this.findOraclePda(marketSymbol);
+        return await this.oracleProgram.account.oracle.fetch(oraclePda);
+    }
+    /**
+     * Find the PDA for an oracle
+     */
+    async findOraclePda(marketSymbol) {
+        return await web3_js_1.PublicKey.findProgramAddress([Buffer.from("oracle"), Buffer.from(marketSymbol)], this.oracleProgram.programId);
     }
     // ===== USER OPERATIONS (TRANSACTION BUILDING) =====
     /**
@@ -140,8 +199,35 @@ class PerpetualSwapSDK {
      * Build a transaction to withdraw collateral
      */
     async buildWithdrawCollateralTransaction(params, userPublicKey) {
-        // Get the position PDA for the user
-        const [positionPda] = (0, utils_1.findPositionPda)(this.program.programId, params.market, userPublicKey);
+        // Get the margin account data to check for positions
+        const marginAccount = await this.getMarginAccount(userPublicKey, params.market);
+        // If there are no positions, we can proceed without position PDAs
+        if (marginAccount.positions.length === 0) {
+            const instruction = await this.program.methods
+                .withdrawCollateral(new anchor_1.BN(params.amount))
+                .accountsStrict({
+                owner: userPublicKey,
+                marginAccount: params.marginAccount,
+                market: params.market,
+                userTokenAccount: params.userTokenAccount,
+                marketVault: params.vault,
+                mint: params.mint,
+                tokenProgram: spl_token_1.TOKEN_PROGRAM_ID,
+            })
+                .instruction();
+            const transaction = new web3_js_1.Transaction();
+            transaction.add(instruction);
+            return transaction;
+        }
+        // If there are positions, get all position PDAs and include them
+        const positionAccounts = await Promise.all(marginAccount.positions.map(async (positionKey) => {
+            const position = await this.getPosition(positionKey);
+            return {
+                pubkey: positionKey,
+                isWritable: true,
+                isSigner: false
+            };
+        }));
         const instruction = await this.program.methods
             .withdrawCollateral(new anchor_1.BN(params.amount))
             .accountsStrict({
@@ -153,7 +239,7 @@ class PerpetualSwapSDK {
             mint: params.mint,
             tokenProgram: spl_token_1.TOKEN_PROGRAM_ID,
         })
-            .remainingAccounts([{ pubkey: positionPda, isWritable: true, isSigner: false }])
+            .remainingAccounts(positionAccounts)
             .instruction();
         const transaction = new web3_js_1.Transaction();
         transaction.add(instruction);
@@ -163,18 +249,15 @@ class PerpetualSwapSDK {
      * Build a transaction to open a position
      */
     async buildOpenPositionTransaction(params, userPublicKey) {
-        const [positionPda, positionBump] = (0, utils_1.findPositionPda)(this.program.programId, params.market, userPublicKey);
-        // Get the market to find the oracle account
-        const market = await this.program.account.market.fetch(params.market);
-        const oracleAccount = market.oracle;
+        const [positionPda, positionBump] = await this.findPositionPda(params.market, userPublicKey);
         const instruction = await this.program.methods
-            .openPosition(params.side, new anchor_1.BN(params.size), new anchor_1.BN(params.leverage), positionBump)
+            .openPosition(params.side, params.size, params.leverage, positionBump)
             .accountsStrict({
             market: params.market,
             position: positionPda,
             marginAccount: params.marginAccount,
             trader: userPublicKey,
-            priceUpdate: oracleAccount,
+            priceUpdate: params.oracleAccount,
             systemProgram: web3_js_1.SystemProgram.programId,
         })
             .instruction();
@@ -185,28 +268,21 @@ class PerpetualSwapSDK {
     /**
      * Build a transaction to close a position
      */
-    // async buildClosePositionTransaction(
-    //   params: ClosePositionParams,
-    //   userPublicKey: PublicKey
-    // ): Promise<Transaction> {
-    //   // Get the market to find the oracle account
-    //   const market = await this.program.account.market.fetch(params.market);
-    //   const oracleAccount = market.oracle;
-    //   const instruction = await this.program.methods
-    //     .closePosition(new BN(params.size))
-    //     .accountsStrict({
-    //       authority: this.provider.publicKey,
-    //       marginAccount: params.marginAccount,
-    //       market: params.market,
-    //       position: params.position,
-    //       priceUpdate: oracleAccount,
-    //       systemProgram: SystemProgram.programId,
-    //     })
-    //     .rpc();
-    //   const transaction = new Transaction();
-    //   transaction.add(tx);
-    //   return transaction;
-    // }
+    async buildClosePositionTransaction(params, userPublicKey) {
+        const instruction = await this.program.methods
+            .closePosition()
+            .accountsStrict({
+            market: params.market,
+            position: params.position,
+            marginAccount: params.marginAccount,
+            trader: userPublicKey,
+            priceUpdate: params.oracleAccount,
+        })
+            .instruction();
+        const transaction = new web3_js_1.Transaction();
+        transaction.add(instruction);
+        return transaction;
+    }
     // ===== READ OPERATIONS =====
     /**
      * Get market details
@@ -217,8 +293,9 @@ class PerpetualSwapSDK {
     /**
      * Get margin account details
      */
-    async getMarginAccount(marginAccountAddress) {
-        return await this.program.account.marginAccount.fetch(marginAccountAddress);
+    async getMarginAccount(userPublicKey, marketPda) {
+        const [marginAccountPda] = await this.findMarginAccountPda(userPublicKey, marketPda);
+        return await this.program.account.marginAccount.fetch(marginAccountPda);
     }
     /**
      * Get position details
@@ -266,3 +343,5 @@ __exportStar(require("./types/margin-account"), exports);
 __exportStar(require("./types/position"), exports);
 // Export utility functions
 __exportStar(require("./utils"), exports);
+// Export oracle types
+__exportStar(require("./types/oracle"), exports);
