@@ -8,6 +8,54 @@
   },
   "instructions": [
     {
+      "name": "close_market_order",
+      "discriminator": [
+        161,
+        211,
+        209,
+        73,
+        201,
+        237,
+        81,
+        146
+      ],
+      "accounts": [
+        {
+          "name": "market",
+          "writable": true,
+          "relations": [
+            "order",
+            "position"
+          ]
+        },
+        {
+          "name": "order",
+          "writable": true
+        },
+        {
+          "name": "position",
+          "writable": true
+        },
+        {
+          "name": "margin_account",
+          "writable": true
+        },
+        {
+          "name": "trader",
+          "writable": true,
+          "signer": true,
+          "relations": [
+            "order",
+            "position"
+          ]
+        },
+        {
+          "name": "price_update"
+        }
+      ],
+      "args": []
+    },
+    {
       "name": "close_position",
       "discriminator": [
         123,

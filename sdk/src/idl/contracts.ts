@@ -14,6 +14,54 @@ export type Contracts = {
   },
   "instructions": [
     {
+      "name": "closeMarketOrder",
+      "discriminator": [
+        161,
+        211,
+        209,
+        73,
+        201,
+        237,
+        81,
+        146
+      ],
+      "accounts": [
+        {
+          "name": "market",
+          "writable": true,
+          "relations": [
+            "order",
+            "position"
+          ]
+        },
+        {
+          "name": "order",
+          "writable": true
+        },
+        {
+          "name": "position",
+          "writable": true
+        },
+        {
+          "name": "marginAccount",
+          "writable": true
+        },
+        {
+          "name": "trader",
+          "writable": true,
+          "signer": true,
+          "relations": [
+            "order",
+            "position"
+          ]
+        },
+        {
+          "name": "priceUpdate"
+        }
+      ],
+      "args": []
+    },
+    {
       "name": "closePosition",
       "discriminator": [
         123,

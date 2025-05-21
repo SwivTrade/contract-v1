@@ -527,6 +527,30 @@ export class PerpetualSwapSDK {
 
     return tx;
   }
+
+  async buildCloseMarketOrderTransaction(
+    params: {
+      market: PublicKey;
+      order: PublicKey;
+      position: PublicKey;
+      marginAccount: PublicKey;
+      oracleAccount: PublicKey;
+    },
+    owner: PublicKey
+  ): Promise<Transaction> {
+    const tx = await this.program.methods
+      .closeMarketOrder()
+      .accountsStrict({
+        market: params.market,
+        order: params.order,
+        position: params.position,
+        marginAccount: params.marginAccount,
+        trader: owner,
+        priceUpdate: params.oracleAccount,
+      } as any)
+      .transaction();
+    return tx;
+  }
 }
 
 // Export types

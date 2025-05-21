@@ -21,7 +21,7 @@ describe("Contract Tests", () => {
   let keypair: Keypair;
 
   // Market setup
-  const marketSymbol = "tpp-PERP";
+  const marketSymbol = "tppp-PERP";
   const initialFundingRate = 0;
   const fundingInterval = 3600;
   const maintenanceMarginRatio = 500; // 5%
@@ -552,20 +552,22 @@ describe("Contract Tests", () => {
     }
   });
 
-  it("Places and executes a long market order", async () => {
+  it("Opens and closes a long market order with profit", async () => {
     // Place long market order
     const side = { long: {} };
     const size = new BN(50_000); // 0.05 tokens
     const leverage = new BN(5);
     const orderNonce = 7;
-    const positionNonce = 8; // Use different nonce for position
+    const positionNonce = 8;
     
+    const [orderPda] = await sdk.findOrderPda(marketPda, keypair.publicKey, orderNonce);
     const [positionPda] = await sdk.findPositionPda(marketPda, keypair.publicKey, positionNonce);
     
     // Log margin account state before placing order
     const marginAccountBefore = await sdk.getMarginAccount(keypair.publicKey, marketPda);
     console.log('Margin Account Before Order:');
     console.log('- Positions:', marginAccountBefore.positions.map(p => p.toBase58()));
+    console.log('- Orders:', marginAccountBefore.orders.map(o => o.toBase58()));
     console.log('- Collateral:', marginAccountBefore.collateral.toNumber() / 1_000_000);
     console.log('- Allocated Margin:', marginAccountBefore.allocatedMargin.toNumber() / 1_000_000);
     
@@ -582,46 +584,73 @@ describe("Contract Tests", () => {
 
     await provider.sendAndConfirm(placeOrderTx);
 
-    // Verify position was created
+    // Verify order and position were created
+    const order = await sdk.getOrder(orderPda);
     const position = await sdk.getPosition(positionPda);
+    console.log('\nOrder Details:');
+    console.log('- PDA:', orderPda.toBase58());
+    console.log('- Size:', order.size.toNumber());
+    console.log('- Leverage:', order.leverage.toNumber());
+    console.log('- Is Active:', order.isActive);
+    
     console.log('\nPosition Details:');
     console.log('- PDA:', positionPda.toBase58());
     console.log('- Size:', position.size.toNumber());
     console.log('- Leverage:', position.leverage.toNumber());
     console.log('- Is Open:', position.isOpen);
 
-    // Verify margin account state
-    const marginAccount = await sdk.getMarginAccount(keypair.publicKey, marketPda);
-    console.log('\nMargin Account After Order:');
-    console.log('- Positions:', marginAccount.positions.map(p => p.toBase58()));
-    console.log('- Collateral:', marginAccount.collateral.toNumber() / 1_000_000);
-    console.log('- Allocated Margin:', marginAccount.allocatedMargin.toNumber() / 1_000_000);
+    // Update oracle price to create profit scenario
+    await sdk.updateOraclePrice({
+      marketSymbol,
+      newPrice: 1200 // Higher than entry price for long profit
+    });
     
-    // Compare position PDAs using their base58 strings
-    const positionPdaStr = positionPda.toBase58();
-    const marginAccountPositions = marginAccount.positions.map(p => p.toBase58());
-    assert.include(marginAccountPositions, positionPdaStr);
+    // Get margin account state before closing
+    const marginAccountBeforeClose = await sdk.getMarginAccount(keypair.publicKey, marketPda);
     
-    // For isolated margin, verify allocated margin
-    if ('isolated' in marginAccount.marginType) {
-      assert.isTrue(marginAccount.allocatedMargin.gt(new BN(0)));
+    const closeOrderTx = await sdk.buildCloseMarketOrderTransaction({
+      market: marketPda,
+      order: orderPda,
+      position: positionPda,
+      marginAccount: marginAccountPda,
+      oracleAccount: mockOraclePda
+    }, keypair.publicKey);
+
+    await provider.sendAndConfirm(closeOrderTx);
+
+    // Verify the margin account state after closing
+    const marginAccountAfter = await sdk.getMarginAccount(keypair.publicKey, marketPda);
+    console.log('\nMargin Account After Close:');
+    console.log('- Positions:', marginAccountAfter.positions.map(p => p.toBase58()));
+    console.log('- Orders:', marginAccountAfter.orders.map(o => o.toBase58()));
+    console.log('- Collateral:', marginAccountAfter.collateral.toNumber() / 1_000_000);
+    console.log('- Allocated Margin:', marginAccountAfter.allocatedMargin.toNumber() / 1_000_000);
+    
+    assert.equal(marginAccountAfter.positions.length, 0);
+    assert.equal(marginAccountAfter.orders.length, 0);
+    assert.isTrue(marginAccountAfter.collateral.gt(marginAccountBeforeClose.collateral));
+    
+    if ('isolated' in marginAccountAfter.marginType) {
+      assert.equal(marginAccountAfter.allocatedMargin.toNumber(), 0);
     }
   });
 
-  it("Places and executes a short market order", async () => {
+  it("Opens and closes a short market order with profit", async () => {
     // Place short market order
     const side = { short: {} };
     const size = new BN(50_000); // 0.05 tokens
     const leverage = new BN(5);
     const orderNonce = 9;
-    const positionNonce = 10; // Use different nonce for position
+    const positionNonce = 10;
     
+    const [orderPda] = await sdk.findOrderPda(marketPda, keypair.publicKey, orderNonce);
     const [positionPda] = await sdk.findPositionPda(marketPda, keypair.publicKey, positionNonce);
     
     // Log margin account state before placing order
     const marginAccountBefore = await sdk.getMarginAccount(keypair.publicKey, marketPda);
     console.log('\nMargin Account Before Short Order:');
     console.log('- Positions:', marginAccountBefore.positions.map(p => p.toBase58()));
+    console.log('- Orders:', marginAccountBefore.orders.map(o => o.toBase58()));
     console.log('- Collateral:', marginAccountBefore.collateral.toNumber() / 1_000_000);
     console.log('- Allocated Margin:', marginAccountBefore.allocatedMargin.toNumber() / 1_000_000);
     
@@ -638,29 +667,162 @@ describe("Contract Tests", () => {
 
     await provider.sendAndConfirm(placeOrderTx);
 
-    // Verify position was created
+    // Verify order and position were created
+    const order = await sdk.getOrder(orderPda);
     const position = await sdk.getPosition(positionPda);
+    console.log('\nShort Order Details:');
+    console.log('- PDA:', orderPda.toBase58());
+    console.log('- Size:', order.size.toNumber());
+    console.log('- Leverage:', order.leverage.toNumber());
+    console.log('- Is Active:', order.isActive);
+    
     console.log('\nShort Position Details:');
     console.log('- PDA:', positionPda.toBase58());
     console.log('- Size:', position.size.toNumber());
     console.log('- Leverage:', position.leverage.toNumber());
     console.log('- Is Open:', position.isOpen);
 
-    // Verify margin account state
-    const marginAccount = await sdk.getMarginAccount(keypair.publicKey, marketPda);
-    console.log('\nMargin Account After Short Order:');
-    console.log('- Positions:', marginAccount.positions.map(p => p.toBase58()));
-    console.log('- Collateral:', marginAccount.collateral.toNumber() / 1_000_000);
-    console.log('- Allocated Margin:', marginAccount.allocatedMargin.toNumber() / 1_000_000);
+    // Update oracle price to create profit scenario for short
+    await sdk.updateOraclePrice({
+      marketSymbol,
+      newPrice: 800 // Lower than entry price for short profit
+    });
     
-    // Compare position PDAs using their base58 strings
-    const positionPdaStr = positionPda.toBase58();
-    const marginAccountPositions = marginAccount.positions.map(p => p.toBase58());
-    assert.include(marginAccountPositions, positionPdaStr);
+    // Get margin account state before closing
+    const marginAccountBeforeClose = await sdk.getMarginAccount(keypair.publicKey, marketPda);
     
-    // For isolated margin, verify allocated margin
-    if ('isolated' in marginAccount.marginType) {
-      assert.isTrue(marginAccount.allocatedMargin.gt(new BN(0)));
+    const closeOrderTx = await sdk.buildCloseMarketOrderTransaction({
+      market: marketPda,
+      order: orderPda,
+      position: positionPda,
+      marginAccount: marginAccountPda,
+      oracleAccount: mockOraclePda
+    }, keypair.publicKey);
+
+    await provider.sendAndConfirm(closeOrderTx);
+
+    // Verify the margin account state after closing
+    const marginAccountAfter = await sdk.getMarginAccount(keypair.publicKey, marketPda);
+    console.log('\nMargin Account After Short Close:');
+    console.log('- Positions:', marginAccountAfter.positions.map(p => p.toBase58()));
+    console.log('- Orders:', marginAccountAfter.orders.map(o => o.toBase58()));
+    console.log('- Collateral:', marginAccountAfter.collateral.toNumber() / 1_000_000);
+    console.log('- Allocated Margin:', marginAccountAfter.allocatedMargin.toNumber() / 1_000_000);
+    
+    assert.equal(marginAccountAfter.positions.length, 0);
+    assert.equal(marginAccountAfter.orders.length, 0);
+    assert.isTrue(marginAccountAfter.collateral.gt(marginAccountBeforeClose.collateral));
+    
+    if ('isolated' in marginAccountAfter.marginType) {
+      assert.equal(marginAccountAfter.allocatedMargin.toNumber(), 0);
+    }
+  });
+
+  it("Opens and closes a long market order with loss", async () => {
+    // Place long market order
+    const side = { long: {} };
+    const size = new BN(50_000); // 0.05 tokens
+    const leverage = new BN(5);
+    const orderNonce = 11;
+    const positionNonce = 12;
+    
+    const [orderPda] = await sdk.findOrderPda(marketPda, keypair.publicKey, orderNonce);
+    const [positionPda] = await sdk.findPositionPda(marketPda, keypair.publicKey, positionNonce);
+    
+    const placeOrderTx = await sdk.buildPlaceMarketOrderTransaction({
+      market: marketPda,
+      marginAccount: marginAccountPda,
+      side,
+      size,
+      leverage,
+      oracleAccount: mockOraclePda,
+      orderNonce,
+      positionNonce
+    }, keypair.publicKey);
+
+    await provider.sendAndConfirm(placeOrderTx);
+
+    // Update oracle price to create loss scenario for long
+    await sdk.updateOraclePrice({
+      marketSymbol,
+      newPrice: 800 // Lower than entry price for long loss
+    });
+    
+    // Get margin account state before closing
+    const marginAccountBefore = await sdk.getMarginAccount(keypair.publicKey, marketPda);
+    
+    const closeOrderTx = await sdk.buildCloseMarketOrderTransaction({
+      market: marketPda,
+      order: orderPda,
+      position: positionPda,
+      marginAccount: marginAccountPda,
+      oracleAccount: mockOraclePda
+    }, keypair.publicKey);
+
+    await provider.sendAndConfirm(closeOrderTx);
+
+    // Verify the margin account state after closing
+    const marginAccountAfter = await sdk.getMarginAccount(keypair.publicKey, marketPda);
+    assert.equal(marginAccountAfter.positions.length, 0);
+    assert.equal(marginAccountAfter.orders.length, 0);
+    assert.isTrue(marginAccountAfter.collateral.lt(marginAccountBefore.collateral));
+    
+    if ('isolated' in marginAccountAfter.marginType) {
+      assert.equal(marginAccountAfter.allocatedMargin.toNumber(), 0);
+    }
+  });
+
+  it("Opens and closes a short market order with loss", async () => {
+    // Place short market order
+    const side = { short: {} };
+    const size = new BN(50_000); // 0.05 tokens
+    const leverage = new BN(5);
+    const orderNonce = 13;
+    const positionNonce = 14;
+    
+    const [orderPda] = await sdk.findOrderPda(marketPda, keypair.publicKey, orderNonce);
+    const [positionPda] = await sdk.findPositionPda(marketPda, keypair.publicKey, positionNonce);
+    
+    const placeOrderTx = await sdk.buildPlaceMarketOrderTransaction({
+      market: marketPda,
+      marginAccount: marginAccountPda,
+      side,
+      size,
+      leverage,
+      oracleAccount: mockOraclePda,
+      orderNonce,
+      positionNonce
+    }, keypair.publicKey);
+
+    await provider.sendAndConfirm(placeOrderTx);
+
+    // Update oracle price to create loss scenario for short
+    await sdk.updateOraclePrice({
+      marketSymbol,
+      newPrice: 1300 // Higher than entry price for short loss
+    });
+    
+    // Get margin account state before closing
+    const marginAccountBefore = await sdk.getMarginAccount(keypair.publicKey, marketPda);
+    
+    const closeOrderTx = await sdk.buildCloseMarketOrderTransaction({
+      market: marketPda,
+      order: orderPda,
+      position: positionPda,
+      marginAccount: marginAccountPda,
+      oracleAccount: mockOraclePda
+    }, keypair.publicKey);
+
+    await provider.sendAndConfirm(closeOrderTx);
+
+    // Verify the margin account state after closing
+    const marginAccountAfter = await sdk.getMarginAccount(keypair.publicKey, marketPda);
+    assert.equal(marginAccountAfter.positions.length, 0);
+    assert.equal(marginAccountAfter.orders.length, 0);
+    assert.isTrue(marginAccountAfter.collateral.lt(marginAccountBefore.collateral));
+    
+    if ('isolated' in marginAccountAfter.marginType) {
+      assert.equal(marginAccountAfter.allocatedMargin.toNumber(), 0);
     }
   });
 
@@ -680,7 +842,7 @@ describe("Contract Tests", () => {
       console.log('Oracle created with price 1100');
     }
     
-    // Clean up any existing positions for ALL tests
+    // Clean up any existing positions and orders for ALL tests
     try {
       const marginAccount = await sdk.getMarginAccount(keypair.publicKey, marketPda);
       
@@ -703,8 +865,28 @@ describe("Contract Tests", () => {
         }
       }
 
-      // Also try to close positions with known nonces (0, 1, 2, 3, 4) in case they exist but aren't in margin account
-      for (let nonce = 0; nonce <= 4; nonce++) {
+      // Close all existing orders in margin account
+      for (const orderKey of marginAccount.orders) {
+        try {
+          const order = await sdk.getOrder(orderKey);
+          if (order.isActive) {
+            console.log('Closing existing active order...');
+            const closeOrderTx = await sdk.buildCloseMarketOrderTransaction({
+              market: marketPda,
+              order: orderKey,
+              position: order.position,
+              marginAccount: marginAccountPda,
+              oracleAccount: mockOraclePda
+            }, keypair.publicKey);
+            await provider.sendAndConfirm(closeOrderTx);
+          }
+        } catch (error) {
+          console.log('Error closing order:', error.message);
+        }
+      }
+
+      // Also try to close positions and orders with known nonces in case they exist but aren't in margin account
+      for (let nonce = 0; nonce <= 14; nonce++) {
         try {
           const [positionPda] = await sdk.findPositionPda(marketPda, keypair.publicKey, nonce);
           const position = await sdk.getPosition(positionPda);
@@ -720,6 +902,24 @@ describe("Contract Tests", () => {
           }
         } catch (error) {
           // Position doesn't exist or other error, continue
+        }
+
+        try {
+          const [orderPda] = await sdk.findOrderPda(marketPda, keypair.publicKey, nonce);
+          const order = await sdk.getOrder(orderPda);
+          if (order.isActive) {
+            console.log(`Closing order with nonce ${nonce}...`);
+            const closeOrderTx = await sdk.buildCloseMarketOrderTransaction({
+              market: marketPda,
+              order: orderPda,
+              position: order.position,
+              marginAccount: marginAccountPda,
+              oracleAccount: mockOraclePda
+            }, keypair.publicKey);
+            await provider.sendAndConfirm(closeOrderTx);
+          }
+        } catch (error) {
+          // Order doesn't exist or other error, continue
         }
       }
     } catch (error) {

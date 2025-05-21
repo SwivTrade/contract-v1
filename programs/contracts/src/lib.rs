@@ -95,6 +95,9 @@ pub mod contracts {
         instructions::order::place_market_order(ctx, side, size, leverage, order_bump, position_bump, order_nonce, position_nonce)
     }
 
+    pub fn close_market_order(ctx: Context<CloseMarketOrder>) -> Result<()> {
+        instructions::order::close_market_order(ctx)
+    }
 
     // pub fn place_limit_order(
     //     ctx: Context<PlaceLimitOrder>,

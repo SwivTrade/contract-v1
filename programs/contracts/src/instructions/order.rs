@@ -185,3 +185,146 @@ pub fn place_market_order(
     Ok(())
 }
 
+#[derive(Accounts)]
+pub struct CloseMarketOrder<'info> {
+    #[account(mut)]
+    pub market: Account<'info, Market>,
+    #[account(
+        mut,
+        has_one = trader,
+        has_one = market,
+        close = trader  // This closes the order account and sends rent to trader
+    )]
+    pub order: Account<'info, Order>,
+    #[account(
+        mut,
+        has_one = trader,
+        has_one = market,
+        constraint = position.is_open @ ErrorCode::PositionClosed,
+        close = trader  // This closes the position account and sends rent to trader
+    )]
+    pub position: Account<'info, Position>,
+    #[account(
+        mut,
+        constraint = margin_account.owner == trader.key() @ ErrorCode::Unauthorized,
+        constraint = margin_account.perp_market == market.key() @ ErrorCode::InvalidParameter,
+    )]
+    pub margin_account: Account<'info, MarginAccount>,
+    #[account(mut)]
+    pub trader: Signer<'info>,
+    /// CHECK: Oracle account - validated in instruction
+    pub price_update: UncheckedAccount<'info>,
+}
+
+pub fn close_market_order(ctx: Context<CloseMarketOrder>) -> Result<()> {
+    let market = &mut ctx.accounts.market;
+    let order = &mut ctx.accounts.order;
+    let position = &mut ctx.accounts.position;
+    let margin_account = &mut ctx.accounts.margin_account;
+    let trader = &ctx.accounts.trader;
+
+    // Get current price from oracle
+    let oracle_data = ctx.accounts.price_update.try_borrow_data()?;
+    let oracle = Oracle::try_deserialize(&mut oracle_data.as_ref())?;
+    let current_price = oracle.price;
+
+    // Calculate PnL
+    let entry_value = position.size
+        .checked_mul(position.entry_price)
+        .ok_or(ErrorCode::MathOverflow)?;
+
+    let exit_value = position.size
+        .checked_mul(current_price)
+        .ok_or(ErrorCode::MathOverflow)?;
+
+    let entry_value_i64 = entry_value as i64;
+    let exit_value_i64 = exit_value as i64;
+
+    let pnl = match position.side {
+        Side::Long => exit_value_i64.checked_sub(entry_value_i64),
+        Side::Short => entry_value_i64.checked_sub(exit_value_i64),
+    }.ok_or(ErrorCode::MathOverflow)?;
+
+    // Store values before accounts are closed
+    let position_side = position.side;
+    let position_size = position.size;
+    let position_collateral = position.collateral;
+    let position_entry_price = position.entry_price;
+    let position_key = position.key();
+    let order_key = order.key();
+
+    // Update market state
+    match position_side {
+        Side::Long => {
+            market.base_asset_reserve = market.base_asset_reserve
+                .checked_sub(position_size)
+                .ok_or(ErrorCode::MathOverflow)?;
+        }
+        Side::Short => {
+            market.base_asset_reserve = market.base_asset_reserve
+                .checked_add(position_size)
+                .ok_or(ErrorCode::MathOverflow)?;
+        }
+    }
+
+    // Update margin account based on margin type
+    match margin_account.margin_type {
+        MarginType::Isolated => {
+            margin_account.allocated_margin = margin_account.allocated_margin
+                .checked_sub(position_collateral)
+                .ok_or(ErrorCode::MathOverflow)?;
+            
+            if pnl > 0 {
+                margin_account.collateral = margin_account.collateral
+                    .checked_add(pnl as u64)
+                    .ok_or(ErrorCode::MathOverflow)?;
+            } else {
+                margin_account.collateral = margin_account.collateral
+                    .checked_sub((-pnl) as u64)
+                    .ok_or(ErrorCode::MathOverflow)?;
+            }
+        },
+        MarginType::Cross => {
+            if pnl > 0 {
+                margin_account.collateral = margin_account.collateral
+                    .checked_add(pnl as u64)
+                    .ok_or(ErrorCode::MathOverflow)?;
+            } else {
+                margin_account.collateral = margin_account.collateral
+                    .checked_sub((-pnl) as u64)
+                    .ok_or(ErrorCode::MathOverflow)?;
+            }
+        }
+    }
+
+    // Remove order and position from margin account's lists
+    if let Some(pos) = margin_account.positions.iter().position(|&p| p == position_key) {
+        margin_account.positions.remove(pos);
+    }
+    if let Some(ord) = margin_account.orders.iter().position(|&o| o == order_key) {
+        margin_account.orders.remove(ord);
+    }
+
+    // Emit events
+    emit!(OrderCancelledEvent {
+        market: market.key(),
+        order: order_key,
+        trader: trader.key(),
+    });
+
+    emit!(PositionClosedEvent {
+        market: market.key(),
+        position: position_key,
+        trader: trader.key(),
+        side: position_side,
+        size: position_size,
+        collateral: position_collateral,
+        entry_price: position_entry_price,
+        exit_price: current_price,
+        realized_pnl: pnl,
+        margin_type: margin_account.margin_type,
+    });
+
+    Ok(())
+}
+
