@@ -115,6 +115,7 @@ pub struct OrderPlacedEvent {
     pub price: u64,
     pub size: u64,
     pub leverage: u64,
+    pub timestamp: i64,
 }
 
 #[event]
@@ -126,6 +127,7 @@ pub struct OrderFilledEvent {
     pub price: u64,
     pub size: u64,
     pub filled_size: u64,
+    pub timestamp: i64,
 }
 
 #[event]

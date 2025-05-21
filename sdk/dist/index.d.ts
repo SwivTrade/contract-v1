@@ -110,7 +110,7 @@ export declare class PerpetualSwapSDK {
     /**
      * Find the PDA for a position
      */
-    findPositionPda(marketPda: PublicKey, owner: PublicKey): Promise<[PublicKey, number]>;
+    findPositionPda(marketPda: PublicKey, owner: PublicKey, nonce: number): Promise<[PublicKey, number]>;
     /**
      * Get all markets from the program
      */

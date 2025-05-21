@@ -4,7 +4,7 @@ use crate::{errors::ErrorCode, events::*, {Market, Position, Side, MarginAccount
 
 
 #[derive(Accounts)]
-#[instruction(side: Side, size: u64, leverage: u64, bump: u8)]
+#[instruction(side: Side, size: u64, leverage: u64, bump: u8, nonce: u8)]
 pub struct OpenPosition<'info> {
     #[account(mut, constraint = market.is_active @ ErrorCode::MarketInactive)]
     pub market: Account<'info, Market>,
@@ -12,7 +12,7 @@ pub struct OpenPosition<'info> {
         init,
         payer = trader,
         space = 8 + 32 + 32 + 1 + 8 + 8 + 8 + 8 + 8 + 8 + 8 + 8 + 8 + 1 + 1,
-        seeds = [b"position", market.key().as_ref(), trader.key().as_ref()],
+        seeds = [b"position", market.key().as_ref(), trader.key().as_ref(), &[nonce]],
         bump
     )]
     pub position: Account<'info, Position>,
@@ -35,6 +35,7 @@ pub fn open_position(
     size: u64,
     leverage: u64,
     bump: u8,
+    _nonce: u8,
 ) -> Result<()> {
     let market = &mut ctx.accounts.market;
     let position = &mut ctx.accounts.position;
@@ -117,7 +118,6 @@ pub fn open_position(
     position.liquidation_price = liquidation_price;
 
     // Update market state
-    msg!("Before market update - base_asset_reserve: {}", market.base_asset_reserve);
     match side {
         Side::Long => {
             market.base_asset_reserve = market.base_asset_reserve
@@ -130,7 +130,6 @@ pub fn open_position(
                 .ok_or(ErrorCode::MathOverflow)?;
         }
     }
-    msg!("After market update - base_asset_reserve: {}", market.base_asset_reserve);
 
     // Add position to margin account
     margin_account.positions.push(position.key());
@@ -182,6 +181,7 @@ pub fn close_position(ctx: Context<ClosePosition>) -> Result<()> {
     let margin_account = &mut ctx.accounts.margin_account;
     let trader = &ctx.accounts.trader;
 
+
     // Get current price from oracle
     let oracle_data = ctx.accounts.price_update.try_borrow_data()?;
     let oracle = Oracle::try_deserialize(&mut oracle_data.as_ref())?;
@@ -204,6 +204,7 @@ pub fn close_position(ctx: Context<ClosePosition>) -> Result<()> {
         Side::Short => entry_value_i64.checked_sub(exit_value_i64),
     }.ok_or(ErrorCode::MathOverflow)?;
 
+
     // Store values before position is closed (account will be deleted)
     let position_side = position.side;
     let position_size = position.size;
@@ -212,7 +213,6 @@ pub fn close_position(ctx: Context<ClosePosition>) -> Result<()> {
     let position_key = position.key();
 
     // Update market state BEFORE closing position
-    msg!("Before market update - base_asset_reserve: {}", market.base_asset_reserve);
     match position_side {
         Side::Long => {
             market.base_asset_reserve = market.base_asset_reserve
@@ -225,17 +225,14 @@ pub fn close_position(ctx: Context<ClosePosition>) -> Result<()> {
                 .ok_or(ErrorCode::MathOverflow)?;
         }
     }
-    msg!("After market update - base_asset_reserve: {}", market.base_asset_reserve);
 
     // Update margin account based on margin type
     match margin_account.margin_type {
         MarginType::Isolated => {
-            // For isolated margin, release the allocated margin
             margin_account.allocated_margin = margin_account.allocated_margin
                 .checked_sub(position_collateral)
                 .ok_or(ErrorCode::MathOverflow)?;
             
-            // Only add/subtract the PnL to collateral
             if pnl > 0 {
                 margin_account.collateral = margin_account.collateral
                     .checked_add(pnl as u64)
@@ -247,7 +244,6 @@ pub fn close_position(ctx: Context<ClosePosition>) -> Result<()> {
             }
         },
         MarginType::Cross => {
-            // For cross margin, just add/subtract the PnL to collateral
             if pnl > 0 {
                 margin_account.collateral = margin_account.collateral
                     .checked_add(pnl as u64)
@@ -279,8 +275,6 @@ pub fn close_position(ctx: Context<ClosePosition>) -> Result<()> {
         margin_type: margin_account.margin_type,
     });
 
-    // Position account will be automatically closed and rent reclaimed
-    // due to the `close = trader` constraint
     Ok(())
 }
 

@@ -27,6 +27,7 @@ export interface OpenPositionParams {
   size: BN;
   leverage: BN;
   oracleAccount: PublicKey;
+  nonce: number;
 }
 
 export interface ClosePositionParams {
