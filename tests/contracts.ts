@@ -13,8 +13,8 @@ describe("Contract Tests", () => {
   // Connection setup
 
  // Previous testnet configuration
-  //const connection = new Connection('https://api.testnet.sonic.game/', 'confirmed');
-    const connection = new Connection('https://api.devnet.solana.com', 'confirmed');
+  const connection = new Connection('https://api.testnet.sonic.game/', 'confirmed');
+    //const connection = new Connection('https://api.devnet.solana.com', 'confirmed');
   // Keypair setup
   const keypairPath = path.join(__dirname, 'keypair.json');
   const tokenDataPath = path.join(__dirname, 'token-data.json');
