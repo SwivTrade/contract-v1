@@ -14,6 +14,54 @@ export type Contracts = {
   },
   "instructions": [
     {
+      "name": "closeMarketOrder",
+      "discriminator": [
+        161,
+        211,
+        209,
+        73,
+        201,
+        237,
+        81,
+        146
+      ],
+      "accounts": [
+        {
+          "name": "market",
+          "writable": true,
+          "relations": [
+            "order",
+            "position"
+          ]
+        },
+        {
+          "name": "order",
+          "writable": true
+        },
+        {
+          "name": "position",
+          "writable": true
+        },
+        {
+          "name": "marginAccount",
+          "writable": true
+        },
+        {
+          "name": "trader",
+          "writable": true,
+          "signer": true,
+          "relations": [
+            "order",
+            "position"
+          ]
+        },
+        {
+          "name": "priceUpdate"
+        }
+      ],
+      "args": []
+    },
+    {
       "name": "closePosition",
       "discriminator": [
         123,
@@ -314,32 +362,7 @@ export type Contracts = {
         },
         {
           "name": "position",
-          "writable": true,
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  112,
-                  111,
-                  115,
-                  105,
-                  116,
-                  105,
-                  111,
-                  110
-                ]
-              },
-              {
-                "kind": "account",
-                "path": "market"
-              },
-              {
-                "kind": "account",
-                "path": "trader"
-              }
-            ]
-          }
+          "writable": true
         },
         {
           "name": "marginAccount",
@@ -378,8 +401,143 @@ export type Contracts = {
         {
           "name": "bump",
           "type": "u8"
+        },
+        {
+          "name": "nonce",
+          "type": "u8"
         }
       ]
+    },
+    {
+      "name": "pauseMarket",
+      "discriminator": [
+        216,
+        238,
+        4,
+        164,
+        65,
+        11,
+        162,
+        91
+      ],
+      "accounts": [
+        {
+          "name": "market",
+          "writable": true
+        },
+        {
+          "name": "authority",
+          "signer": true,
+          "relations": [
+            "market"
+          ]
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "placeMarketOrder",
+      "discriminator": [
+        90,
+        118,
+        192,
+        252,
+        192,
+        99,
+        39,
+        145
+      ],
+      "accounts": [
+        {
+          "name": "market",
+          "writable": true
+        },
+        {
+          "name": "order",
+          "writable": true
+        },
+        {
+          "name": "position",
+          "writable": true
+        },
+        {
+          "name": "marginAccount",
+          "writable": true
+        },
+        {
+          "name": "trader",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "priceUpdate"
+        },
+        {
+          "name": "systemProgram",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "side",
+          "type": {
+            "defined": {
+              "name": "side"
+            }
+          }
+        },
+        {
+          "name": "size",
+          "type": "u64"
+        },
+        {
+          "name": "leverage",
+          "type": "u64"
+        },
+        {
+          "name": "orderBump",
+          "type": "u8"
+        },
+        {
+          "name": "positionBump",
+          "type": "u8"
+        },
+        {
+          "name": "orderNonce",
+          "type": "u8"
+        },
+        {
+          "name": "positionNonce",
+          "type": "u8"
+        }
+      ]
+    },
+    {
+      "name": "resumeMarket",
+      "discriminator": [
+        198,
+        120,
+        104,
+        87,
+        44,
+        103,
+        108,
+        143
+      ],
+      "accounts": [
+        {
+          "name": "market",
+          "writable": true
+        },
+        {
+          "name": "authority",
+          "signer": true,
+          "relations": [
+            "market"
+          ]
+        }
+      ],
+      "args": []
     },
     {
       "name": "updateFundingPayments",
@@ -511,6 +669,19 @@ export type Contracts = {
         227,
         198,
         154
+      ]
+    },
+    {
+      "name": "order",
+      "discriminator": [
+        134,
+        173,
+        223,
+        185,
+        77,
+        86,
+        28,
+        51
       ]
     },
     {
@@ -1310,6 +1481,70 @@ export type Contracts = {
       }
     },
     {
+      "name": "order",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "trader",
+            "type": "pubkey"
+          },
+          {
+            "name": "market",
+            "type": "pubkey"
+          },
+          {
+            "name": "side",
+            "type": {
+              "defined": {
+                "name": "side"
+              }
+            }
+          },
+          {
+            "name": "orderType",
+            "type": {
+              "defined": {
+                "name": "orderType"
+              }
+            }
+          },
+          {
+            "name": "price",
+            "type": "u64"
+          },
+          {
+            "name": "size",
+            "type": "u64"
+          },
+          {
+            "name": "filledSize",
+            "type": "u64"
+          },
+          {
+            "name": "leverage",
+            "type": "u64"
+          },
+          {
+            "name": "collateral",
+            "type": "u64"
+          },
+          {
+            "name": "createdAt",
+            "type": "i64"
+          },
+          {
+            "name": "isActive",
+            "type": "bool"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
       "name": "orderCancelledEvent",
       "type": {
         "kind": "struct",
@@ -1365,6 +1600,10 @@ export type Contracts = {
           {
             "name": "filledSize",
             "type": "u64"
+          },
+          {
+            "name": "timestamp",
+            "type": "i64"
           }
         ]
       }
@@ -1413,6 +1652,10 @@ export type Contracts = {
           {
             "name": "leverage",
             "type": "u64"
+          },
+          {
+            "name": "timestamp",
+            "type": "i64"
           }
         ]
       }

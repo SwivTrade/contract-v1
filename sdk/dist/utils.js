@@ -37,13 +37,15 @@ function findMarginAccountPda(programId, owner, market) {
  * @param programId The program ID
  * @param market The market's public key
  * @param owner The owner's public key
+ * @param nonce The nonce to include in the PDA
  * @returns A tuple containing the position PDA and the bump seed
  */
-function findPositionPda(programId, market, owner) {
+function findPositionPda(programId, market, owner, nonce) {
     return web3_js_1.PublicKey.findProgramAddressSync([
         Buffer.from("position"),
         market.toBuffer(),
-        owner.toBuffer()
+        owner.toBuffer(),
+        Buffer.from([nonce])
     ], programId);
 }
 /**

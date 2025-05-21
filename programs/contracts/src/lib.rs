@@ -39,6 +39,14 @@ pub mod contracts {
         )
     }
 
+    pub fn pause_market(ctx: Context<PauseMarket>) -> Result<()> {
+        instructions::market::pause_market(ctx)
+    }
+
+    pub fn resume_market(ctx: Context<ResumeMarket>) -> Result<()> {
+        instructions::market::resume_market(ctx)
+    }
+
     pub fn create_margin_account(ctx: Context<CreateMarginAccount>, margin_type: MarginType, bump: u8) -> Result<()> {
         instructions::collateral::create_margin_account(ctx, margin_type, bump)
     }
@@ -65,12 +73,30 @@ pub mod contracts {
         size: u64,
         leverage: u64,
         bump: u8,
+        nonce: u8,
     ) -> Result<()> {
-        instructions::position::open_position(ctx, side, size, leverage, bump)
+        instructions::position::open_position(ctx, side, size, leverage, bump, nonce)
     }
 
     pub fn close_position(ctx: Context<ClosePosition>) -> Result<()> {
         instructions::position::close_position(ctx)
+    }
+
+    pub fn place_market_order(
+        ctx: Context<PlaceMarketOrder>,
+        side: Side,
+        size: u64,
+        leverage: u64,
+        order_bump: u8,
+        position_bump: u8,
+        order_nonce: u8,
+        position_nonce: u8,
+    ) -> Result<()> {
+        instructions::order::place_market_order(ctx, side, size, leverage, order_bump, position_bump, order_nonce, position_nonce)
+    }
+
+    pub fn close_market_order(ctx: Context<CloseMarketOrder>) -> Result<()> {
+        instructions::order::close_market_order(ctx)
     }
 
     // pub fn place_limit_order(
@@ -82,16 +108,6 @@ pub mod contracts {
     //     bump: u8,
     // ) -> Result<()> {
     //     instructions::order::place_limit_order(ctx, side, price, size, leverage, bump)
-    // }
-
-    // pub fn place_market_order(
-    //     ctx: Context<PlaceMarketOrder>,
-    //     side: Side,
-    //     size: u64,
-    //     leverage: u64,
-    //     bump: u8,
-    // ) -> Result<()> {
-    //     instructions::order::place_market_order(ctx, side, size, leverage, bump)
     // }
 
     // pub fn cancel_order(ctx: Context<CancelOrder>) -> Result<()> {

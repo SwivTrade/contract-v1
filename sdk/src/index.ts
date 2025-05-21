@@ -1,5 +1,5 @@
 import { Program, AnchorProvider, web3, BN, Wallet } from '@coral-xyz/anchor';
-import { PublicKey, Transaction, TransactionInstruction, Keypair, SystemProgram } from '@solana/web3.js';
+import { PublicKey, Transaction, TransactionInstruction, Keypair, SystemProgram, Connection } from '@solana/web3.js';
 import { ASSOCIATED_TOKEN_PROGRAM_ID, TOKEN_PROGRAM_ID } from '@solana/spl-token';
 import type { Contracts } from "./idl/index"
 import { IDL } from "./idl/index"
@@ -31,6 +31,7 @@ export class PerpetualSwapSDK {
   private provider: AnchorProvider;
   private isAdmin: boolean;
   private adminKeypair?: Keypair;
+  private connection: Connection;
 
   /**
    * Initialize the SDK
@@ -40,10 +41,11 @@ export class PerpetualSwapSDK {
    * @param adminKeypair - Optional admin keypair for admin operations
    */
   constructor(
-    connection: web3.Connection,
+    connection: Connection,
     wallet?: Wallet,
     adminKeypair?: Keypair
   ) {
+    this.connection = connection;
     // If wallet is provided, we're in admin mode
     if (wallet) {
       this.provider = new AnchorProvider(connection, wallet, {
@@ -326,11 +328,12 @@ export class PerpetualSwapSDK {
   ): Promise<Transaction> {
     const [positionPda, positionBump] = await this.findPositionPda(
       params.market,
-      userPublicKey
+      userPublicKey,
+      params.nonce
     );
 
     const instruction = await this.program.methods
-      .openPosition(params.side, params.size, params.leverage, positionBump)
+      .openPosition(params.side, params.size, params.leverage, positionBump, params.nonce)
       .accountsStrict({
         market: params.market,
         position: positionPda,
@@ -427,11 +430,17 @@ export class PerpetualSwapSDK {
   /**
    * Find the PDA for a position
    */
-  async findPositionPda(
-    marketPda: PublicKey,
-    owner: PublicKey
-  ): Promise<[PublicKey, number]> {
-    return findPositionPda(this.program.programId, marketPda, owner);
+  async findPositionPda(market: PublicKey, trader: PublicKey, nonce: number): Promise<[PublicKey, number]> {
+    const [pda, bump] = await PublicKey.findProgramAddress(
+      [
+        Buffer.from("position"),
+        market.toBuffer(),
+        trader.toBuffer(),
+        Buffer.from([nonce]),
+      ],
+      this.program.programId
+    );
+    return [pda, bump];
   }
 
   /**
@@ -440,6 +449,107 @@ export class PerpetualSwapSDK {
   async getAllMarkets(): Promise<Market[]> {
     const markets = await this.program.account.market.all();
     return markets.map(market => market.account as unknown as Market);
+  }
+
+  async findOrderPda(market: PublicKey, trader: PublicKey, nonce: number): Promise<[PublicKey, number]> {
+    return PublicKey.findProgramAddress(
+      [Buffer.from("order"), market.toBuffer(), trader.toBuffer(), Buffer.from([nonce])],
+      this.program.programId
+    );
+  }
+
+  async getOrder(orderPda: PublicKey) {
+    return await this.program.account.order.fetch(orderPda) as any;
+  }
+
+  async buildPlaceMarketOrderTransaction(
+    params: {
+      market: PublicKey;
+      marginAccount: PublicKey;
+      side: { long: {} } | { short: {} };
+      size: BN;
+      leverage: BN;
+      oracleAccount: PublicKey;
+      orderNonce: number;
+      positionNonce: number;
+    },
+    trader: PublicKey
+  ): Promise<Transaction> {
+    const [orderPda, orderBump] = await this.findOrderPda(params.market, trader, params.orderNonce);
+    const [positionPda, positionBump] = await this.findPositionPda(params.market, trader, params.positionNonce);
+
+    const tx = await this.program.methods
+      .placeMarketOrder(params.side, params.size, params.leverage, orderBump, positionBump, params.orderNonce, params.positionNonce)
+      .accountsStrict({
+        market: params.market,
+        order: orderPda,
+        position: positionPda,
+        marginAccount: params.marginAccount,
+        trader,
+        priceUpdate: params.oracleAccount,
+        systemProgram: SystemProgram.programId,
+      })
+      .transaction();
+
+    return tx;
+  }
+
+  async buildPauseMarketTransaction(
+    params: {
+      market: PublicKey;
+    },
+    authority: PublicKey
+  ): Promise<Transaction> {
+    const tx = await this.program.methods
+      .pauseMarket()
+      .accountsStrict({
+        market: params.market,
+        authority,
+      })
+      .transaction();
+
+    return tx;
+  }
+
+  async buildResumeMarketTransaction(
+    params: {
+      market: PublicKey;
+    },
+    authority: PublicKey
+  ): Promise<Transaction> {
+    const tx = await this.program.methods
+      .resumeMarket()
+      .accountsStrict({
+        market: params.market,
+        authority,
+      })
+      .transaction();
+
+    return tx;
+  }
+
+  async buildCloseMarketOrderTransaction(
+    params: {
+      market: PublicKey;
+      order: PublicKey;
+      position: PublicKey;
+      marginAccount: PublicKey;
+      oracleAccount: PublicKey;
+    },
+    owner: PublicKey
+  ): Promise<Transaction> {
+    const tx = await this.program.methods
+      .closeMarketOrder()
+      .accountsStrict({
+        market: params.market,
+        order: params.order,
+        position: params.position,
+        marginAccount: params.marginAccount,
+        trader: owner,
+        priceUpdate: params.oracleAccount,
+      } as any)
+      .transaction();
+    return tx;
   }
 }
 

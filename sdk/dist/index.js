@@ -249,7 +249,7 @@ class PerpetualSwapSDK {
      * Build a transaction to open a position
      */
     async buildOpenPositionTransaction(params, userPublicKey) {
-        const [positionPda, positionBump] = await this.findPositionPda(params.market, userPublicKey);
+        const [positionPda, positionBump] = await this.findPositionPda(params.market, userPublicKey, params.nonce);
         const instruction = await this.program.methods
             .openPosition(params.side, params.size, params.leverage, positionBump)
             .accountsStrict({
@@ -325,8 +325,8 @@ class PerpetualSwapSDK {
     /**
      * Find the PDA for a position
      */
-    async findPositionPda(marketPda, owner) {
-        return (0, utils_1.findPositionPda)(this.program.programId, marketPda, owner);
+    async findPositionPda(marketPda, owner, nonce) {
+        return (0, utils_1.findPositionPda)(this.program.programId, marketPda, owner, nonce);
     }
     /**
      * Get all markets from the program

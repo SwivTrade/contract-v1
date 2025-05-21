@@ -1,286 +1,330 @@
-// use anchor_lang::prelude::*;
-// use pyth_solana_receiver_sdk::price_update::{get_feed_id_from_hex, PriceUpdateV2};
-// use crate::{errors::ErrorCode, events::*, {Market, Order, OrderType, Side}};
+use anchor_lang::prelude::*;
+use mock_oracle::Oracle;
+use crate::{errors::ErrorCode, events::*, {Market, Order, OrderType, Side, MarginAccount, MarginType, Position}};
 
-// #[derive(Accounts)]
-// #[instruction(side: Side, price: u64, size: u64, leverage: u64, bump: u8)]
-// pub struct PlaceLimitOrder<'info> {
-//     #[account(mut, constraint = market.is_active @ ErrorCode::MarketInactive)]
-//     pub market: Account<'info, Market>,
-//     #[account(
-//         init,
-//         payer = trader,
-//         space = Order::SPACE, // Use constant for exact size
-//         seeds = [b"order", market.key().as_ref(), trader.key().as_ref(), &Clock::get().unwrap().unix_timestamp.to_le_bytes()],
-//         bump
-//     )]
-//     pub order: Account<'info, Order>,
-//     #[account(mut)]
-//     pub trader: Signer<'info>,
-//     /// CHECK: This is the Pyth price account, validated in get_price_from_oracle
-//     pub price_update: Account<'info, PriceUpdateV2>,
-//     pub system_program: Program<'info, System>,
-// }
+#[derive(Accounts)]
+#[instruction(side: Side, size: u64, leverage: u64, order_bump: u8, position_bump: u8, order_nonce: u8, position_nonce: u8)]
+pub struct PlaceMarketOrder<'info> {
+    #[account(mut, constraint = market.is_active @ ErrorCode::MarketInactive)]
+    pub market: Account<'info, Market>,
+    #[account(
+        init,
+        payer = trader,
+        space = Order::SPACE,
+        seeds = [b"order", market.key().as_ref(), trader.key().as_ref(), &[order_nonce]],
+        bump
+    )]
+    pub order: Account<'info, Order>,
+    #[account(
+        init,
+        payer = trader,
+        space = Position::SPACE,
+        seeds = [b"position", market.key().as_ref(), trader.key().as_ref(), &[position_nonce]],
+        bump
+    )]
+    pub position: Account<'info, Position>,
+    #[account(
+        mut,
+        constraint = margin_account.owner == trader.key() @ ErrorCode::Unauthorized,
+        constraint = margin_account.perp_market == market.key() @ ErrorCode::InvalidParameter,
+    )]
+    pub margin_account: Account<'info, MarginAccount>,
+    #[account(mut)]
+    pub trader: Signer<'info>,
+    /// CHECK: Oracle account - validated in instruction
+    pub price_update: UncheckedAccount<'info>,
+    pub system_program: Program<'info, System>,
+}
 
-// pub fn place_limit_order(
-//     mut ctx: Context<PlaceLimitOrder>,
-//     side: Side,
-//     price: u64,
-//     size: u64,
-//     leverage: u64,
-//     bump: u8,
-// ) -> Result<()> {
-//     // Scope to drop mutable borrows before match_limit_order
-//     {
-//         let market = &mut ctx.accounts.market;
-//         let order = &mut ctx.accounts.order;
-//         let trader = &ctx.accounts.trader;
+pub fn place_market_order(
+    ctx: Context<PlaceMarketOrder>,
+    side: Side,
+    size: u64,
+    leverage: u64,
+    order_bump: u8,
+    position_bump: u8,
+    _order_nonce: u8,
+    _position_nonce: u8,
+) -> Result<()> {
+    let market = &mut ctx.accounts.market;
+    let order = &mut ctx.accounts.order;
+    let position = &mut ctx.accounts.position;
+    let margin_account = &mut ctx.accounts.margin_account;
+    let trader = &ctx.accounts.trader;
 
-//         // Validate inputs
-//         require!(market.is_active, ErrorCode::MarketInactive);
-//         require!(leverage <= market.max_leverage, ErrorCode::LeverageTooHigh);
-//         require!(size > 0, ErrorCode::InvalidOrderSize);
-//         require!(price > 0, ErrorCode::InvalidOrderPrice);
+    // Get current timestamp safely
+    let clock = Clock::get()?;
+    let current_timestamp = clock.unix_timestamp;
 
-//         // Calculate required collateral
-//         let required_collateral = size
-//             .checked_mul(price)
-//             .ok_or(ErrorCode::MathOverflow)?
-//             .checked_div(leverage)
-//             .ok_or(ErrorCode::MathOverflow)?;
+    // Validate inputs
+    require!(market.is_active, ErrorCode::MarketInactive);
+    require!(leverage <= market.max_leverage, ErrorCode::LeverageTooHigh);
+    require!(size > 0, ErrorCode::InvalidOrderSize);
 
-//         // TODO: Transfer collateral from trader (requires token program integration)
+    // Get current price from oracle
+    let oracle_data = ctx.accounts.price_update.try_borrow_data()?;
+    let oracle = Oracle::try_deserialize(&mut oracle_data.as_ref())?;
+    let current_price = oracle.price;
 
-//         // Initialize order
-//         order.trader = trader.key();
-//         order.market = market.key();
-//         order.side = side;
-//         order.order_type = OrderType::Limit;
-//         order.price = price;
-//         order.size = size;
-//         order.filled_size = 0;
-//         order.leverage = leverage;
-//         order.collateral = required_collateral;
-//         order.created_at = Clock::get()?.unix_timestamp;
-//         order.is_active = true;
-//         order.bump = bump;
-//     } // Mutable borrows of market and order are dropped here
+    // Calculate required collateral
+    // Scale price by 1e6 to match token decimals
+    let scaled_price = current_price
+        .checked_mul(1_000_000)
+        .ok_or(ErrorCode::MathOverflow)?;
 
-//     // Try to match the order immediately
-//     match_limit_order(&mut ctx)?;
+    // Calculate position value with proper decimal handling
+    let position_value = size
+        .checked_mul(scaled_price)
+        .ok_or(ErrorCode::MathOverflow)?
+        .checked_div(1_000_000)  // Divide by 1e6 to get back to token decimals
+        .ok_or(ErrorCode::MathOverflow)?;
 
-//     // Emit event using ctx.accounts directly
-//     emit!(OrderPlacedEvent {
-//         market: ctx.accounts.market.key(),
-//         order: ctx.accounts.order.key(),
-//         trader: ctx.accounts.trader.key(),
-//         side,
-//         order_type: OrderType::Limit,
-//         price,
-//         size,
-//         leverage,
-//     });
+    let required_collateral = position_value
+        .checked_div(leverage)
+        .ok_or(ErrorCode::MathOverflow)?;
 
-//     Ok(())
-// }
+    // Ensure minimum margin requirements are met
+    let min_required_margin = position_value
+        .checked_mul(market.initial_margin_ratio)
+        .ok_or(ErrorCode::MathOverflow)?
+        .checked_div(10000)
+        .ok_or(ErrorCode::MathOverflow)?;
 
-// #[derive(Accounts)]
-// #[instruction(side: Side, size: u64, leverage: u64, bump: u8)]
-// pub struct PlaceMarketOrder<'info> {
-//     #[account(mut, constraint = market.is_active @ ErrorCode::MarketInactive)]
-//     pub market: Account<'info, Market>,
-//     #[account(
-//         init,
-//         payer = trader,
-//         space = Order::SPACE, // Use constant for exact size
-//         seeds = [b"order", market.key().as_ref(), trader.key().as_ref(), &Clock::get().unwrap().unix_timestamp.to_le_bytes()],
-//         bump
-//     )]
-//     pub order: Account<'info, Order>,
-//     #[account(mut)]
-//     pub trader: Signer<'info>,
-//     /// CHECK: This is the Pyth price account, validated in get_price_from_oracle
-//     pub price_update: Account<'info, PriceUpdateV2>,
-//     pub system_program: Program<'info, System>,
-// }
+    require!(required_collateral >= min_required_margin, ErrorCode::InsufficientMargin);
 
-// pub fn place_market_order(
-//     ctx: Context<PlaceMarketOrder>,
-//     side: Side,
-//     size: u64,
-//     leverage: u64,
-//     bump: u8,
-// ) -> Result<()> {
-//     let market = &mut ctx.accounts.market;
-//     let order = &mut ctx.accounts.order;
-//     let trader = &ctx.accounts.trader;
+    // Check if there's enough available margin based on margin type
+    match margin_account.margin_type {
+        MarginType::Isolated => {
+            // For isolated margin, check if there's enough available margin
+            let available_margin = margin_account.available_margin()?;
+            require!(available_margin >= required_collateral, ErrorCode::InsufficientMargin);
+            
+            // Allocate margin to this position
+            margin_account.allocated_margin = margin_account.allocated_margin
+                .checked_add(required_collateral)
+                .ok_or(ErrorCode::MathOverflow)?;
+        },
+        MarginType::Cross => {
+            // For cross margin, check if total margin is sufficient
+            require!(margin_account.collateral >= required_collateral, ErrorCode::InsufficientMargin);
+        }
+    }
 
-//     // Validate inputs
-//     require!(market.is_active, ErrorCode::MarketInactive);
-//     require!(leverage <= market.max_leverage, ErrorCode::LeverageTooHigh);
-//     require!(size > 0, ErrorCode::InvalidOrderSize);
+    // Initialize order
+    order.trader = trader.key();
+    order.market = market.key();
+    order.side = side;
+    order.order_type = OrderType::Market;
+    order.price = current_price;
+    order.size = size;
+    order.filled_size = size; // Market orders fill immediately
+    order.leverage = leverage;
+    order.collateral = required_collateral;
+    order.created_at = current_timestamp;
+    order.is_active = false; // Market orders complete immediately
+    order.bump = order_bump;
 
-//     // Get current price from oracle
-//     let current_price = get_price_from_oracle(&ctx.accounts.price_update)?;
-//     // let current_price = 100_000_000;
+    // Initialize position
+    position.trader = trader.key();
+    position.market = market.key();
+    position.side = side;
+    position.size = size;
+    position.collateral = required_collateral;
+    position.entry_price = current_price;
+    position.entry_funding_rate = market.funding_rate;
+    position.leverage = leverage;
+    position.realized_pnl = 0;
+    position.last_funding_payment_time = current_timestamp;
+    position.last_cumulative_funding = 0;
+    position.liquidation_price = 0; // Will be calculated in a separate instruction
+    position.is_open = true;
+    position.bump = position_bump;
 
-//     // Calculate required collateral
-//     let required_collateral = size
-//         .checked_mul(current_price)
-//         .ok_or(ErrorCode::MathOverflow)?
-//         .checked_div(leverage)
-//         .ok_or(ErrorCode::MathOverflow)?;
+    // Update market state
+    match side {
+        Side::Long => {
+            market.base_asset_reserve = market.base_asset_reserve
+                .checked_add(size)
+                .ok_or(ErrorCode::MathOverflow)?;
+        }
+        Side::Short => {
+            market.base_asset_reserve = market.base_asset_reserve
+                .checked_sub(size)
+                .ok_or(ErrorCode::MathOverflow)?;
+        }
+    }
 
-//     // TODO: Transfer collateral from trader
+    // Add order and position to margin account
+    margin_account.orders.push(order.key());
+    margin_account.positions.push(position.key());
 
-//     // Initialize order
-//     order.trader = trader.key();
-//     order.market = market.key();
-//     order.side = side;
-//     order.order_type = OrderType::Market;
-//     order.price = current_price;
-//     order.size = size;
-//     order.filled_size = size; // Market orders fill immediately
-//     order.leverage = leverage;
-//     order.collateral = required_collateral;
-//     order.created_at = Clock::get()?.unix_timestamp;
-//     order.is_active = false; // Market orders complete immediately
-//     order.bump = bump;
+    // Emit events
+    emit!(OrderPlacedEvent {
+        market: market.key(),
+        order: order.key(),
+        trader: trader.key(),
+        side,
+        order_type: OrderType::Market,
+        price: current_price,
+        size,
+        leverage,
+        timestamp: current_timestamp,
+    });
 
-//     // Update market state
-//     match side {
-//         Side::Long => {
-//             market.base_asset_reserve = market.base_asset_reserve
-//                 .checked_add(size)
-//                 .ok_or(ErrorCode::MathOverflow)?;
-//         }
-//         Side::Short => {
-//             market.base_asset_reserve = market.base_asset_reserve
-//                 .checked_sub(size)
-//                 .ok_or(ErrorCode::MathOverflow)?;
-//         }
-//     }
+    emit!(OrderFilledEvent {
+        market: market.key(),
+        order: order.key(),
+        trader: trader.key(),
+        side,
+        price: current_price,
+        size,
+        filled_size: size,
+        timestamp: current_timestamp,
+    });
 
-//     // Emit events
-//     emit!(OrderPlacedEvent {
-//         market: market.key(),
-//         order: order.key(),
-//         trader: trader.key(),
-//         side,
-//         order_type: OrderType::Market,
-//         price: current_price,
-//         size,
-//         leverage,
-//     });
+    Ok(())
+}
 
-//     emit!(OrderFilledEvent {
-//         market: market.key(),
-//         order: order.key(),
-//         trader: trader.key(),
-//         side,
-//         price: current_price,
-//         size,
-//         filled_size: size,
-//     });
+#[derive(Accounts)]
+pub struct CloseMarketOrder<'info> {
+    #[account(mut)]
+    pub market: Account<'info, Market>,
+    #[account(
+        mut,
+        has_one = trader,
+        has_one = market,
+        close = trader  // This closes the order account and sends rent to trader
+    )]
+    pub order: Account<'info, Order>,
+    #[account(
+        mut,
+        has_one = trader,
+        has_one = market,
+        constraint = position.is_open @ ErrorCode::PositionClosed,
+        close = trader  // This closes the position account and sends rent to trader
+    )]
+    pub position: Account<'info, Position>,
+    #[account(
+        mut,
+        constraint = margin_account.owner == trader.key() @ ErrorCode::Unauthorized,
+        constraint = margin_account.perp_market == market.key() @ ErrorCode::InvalidParameter,
+    )]
+    pub margin_account: Account<'info, MarginAccount>,
+    #[account(mut)]
+    pub trader: Signer<'info>,
+    /// CHECK: Oracle account - validated in instruction
+    pub price_update: UncheckedAccount<'info>,
+}
 
-//     Ok(())
-// }
+pub fn close_market_order(ctx: Context<CloseMarketOrder>) -> Result<()> {
+    let market = &mut ctx.accounts.market;
+    let order = &mut ctx.accounts.order;
+    let position = &mut ctx.accounts.position;
+    let margin_account = &mut ctx.accounts.margin_account;
+    let trader = &ctx.accounts.trader;
 
-// #[derive(Accounts)]
-// pub struct CancelOrder<'info> {
-//     #[account()]
-//     pub market: Account<'info, Market>,
-//     #[account(
-//         mut,
-//         has_one = trader,
-//         has_one = market,
-//         constraint = order.is_active @ ErrorCode::OrderNotActive
-//     )]
-//     pub order: Account<'info, Order>,
-//     #[account(mut)]
-//     pub trader: Signer<'info>,
-// }
+    // Get current price from oracle
+    let oracle_data = ctx.accounts.price_update.try_borrow_data()?;
+    let oracle = Oracle::try_deserialize(&mut oracle_data.as_ref())?;
+    let current_price = oracle.price;
 
-// pub fn cancel_order(ctx: Context<CancelOrder>) -> Result<()> {
-//     let order = &mut ctx.accounts.order;
+    // Calculate PnL
+    let entry_value = position.size
+        .checked_mul(position.entry_price)
+        .ok_or(ErrorCode::MathOverflow)?;
 
-//     order.is_active = false;
+    let exit_value = position.size
+        .checked_mul(current_price)
+        .ok_or(ErrorCode::MathOverflow)?;
 
-//     // TODO: Return collateral to trader
+    let entry_value_i64 = entry_value as i64;
+    let exit_value_i64 = exit_value as i64;
 
-//     emit!(OrderCancelledEvent {
-//         market: ctx.accounts.market.key(),
-//         order: order.key(),
-//         trader: ctx.accounts.trader.key(),
-//     });
+    let pnl = match position.side {
+        Side::Long => exit_value_i64.checked_sub(entry_value_i64),
+        Side::Short => entry_value_i64.checked_sub(exit_value_i64),
+    }.ok_or(ErrorCode::MathOverflow)?;
 
-//     Ok(())
-// }
+    // Store values before accounts are closed
+    let position_side = position.side;
+    let position_size = position.size;
+    let position_collateral = position.collateral;
+    let position_entry_price = position.entry_price;
+    let position_key = position.key();
+    let order_key = order.key();
 
-// // Helper function to match a limit order
-// fn match_limit_order(ctx: &mut Context<PlaceLimitOrder>) -> Result<()> {
-//     let market = &mut ctx.accounts.market;
-//     let order = &mut ctx.accounts.order;
+    // Update market state
+    match position_side {
+        Side::Long => {
+            market.base_asset_reserve = market.base_asset_reserve
+                .checked_sub(position_size)
+                .ok_or(ErrorCode::MathOverflow)?;
+        }
+        Side::Short => {
+            market.base_asset_reserve = market.base_asset_reserve
+                .checked_add(position_size)
+                .ok_or(ErrorCode::MathOverflow)?;
+        }
+    }
 
-//     // Simplified matching logic
-//     let current_price = get_price_from_oracle(&ctx.accounts.price_update)?;
-//     // let current_price = 100_000_000;
-//     let can_fill = match order.side {
-//         Side::Long => current_price <= order.price,
-//         Side::Short => current_price >= order.price,
-//     };
+    // Update margin account based on margin type
+    match margin_account.margin_type {
+        MarginType::Isolated => {
+            margin_account.allocated_margin = margin_account.allocated_margin
+                .checked_sub(position_collateral)
+                .ok_or(ErrorCode::MathOverflow)?;
+            
+            if pnl > 0 {
+                margin_account.collateral = margin_account.collateral
+                    .checked_add(pnl as u64)
+                    .ok_or(ErrorCode::MathOverflow)?;
+            } else {
+                margin_account.collateral = margin_account.collateral
+                    .checked_sub((-pnl) as u64)
+                    .ok_or(ErrorCode::MathOverflow)?;
+            }
+        },
+        MarginType::Cross => {
+            if pnl > 0 {
+                margin_account.collateral = margin_account.collateral
+                    .checked_add(pnl as u64)
+                    .ok_or(ErrorCode::MathOverflow)?;
+            } else {
+                margin_account.collateral = margin_account.collateral
+                    .checked_sub((-pnl) as u64)
+                    .ok_or(ErrorCode::MathOverflow)?;
+            }
+        }
+    }
 
-//     if can_fill {
-//         order.filled_size = order.size;
-//         order.is_active = false;
+    // Remove order and position from margin account's lists
+    if let Some(pos) = margin_account.positions.iter().position(|&p| p == position_key) {
+        margin_account.positions.remove(pos);
+    }
+    if let Some(ord) = margin_account.orders.iter().position(|&o| o == order_key) {
+        margin_account.orders.remove(ord);
+    }
 
-//         // Update market state
-//         match order.side {
-//             Side::Long => {
-//                 market.base_asset_reserve = market.base_asset_reserve
-//                     .checked_add(order.size)
-//                     .ok_or(ErrorCode::MathOverflow)?;
-//             }
-//             Side::Short => {
-//                 market.base_asset_reserve = market.base_asset_reserve
-//                     .checked_sub(order.size)
-//                     .ok_or(ErrorCode::MathOverflow)?;
-//             }
-//         }
+    // Emit events
+    emit!(OrderCancelledEvent {
+        market: market.key(),
+        order: order_key,
+        trader: trader.key(),
+    });
 
-//         // TODO: Create position account for trader
+    emit!(PositionClosedEvent {
+        market: market.key(),
+        position: position_key,
+        trader: trader.key(),
+        side: position_side,
+        size: position_size,
+        collateral: position_collateral,
+        entry_price: position_entry_price,
+        exit_price: current_price,
+        realized_pnl: pnl,
+        margin_type: margin_account.margin_type,
+    });
 
-//         emit!(OrderFilledEvent {
-//             market: market.key(),
-//             order: order.key(),
-//             trader: order.trader,
-//             side: order.side,
-//             price: current_price,
-//             size: order.size,
-//             filled_size: order.filled_size,
-//         });
-//     }
-
-//     Ok(())
-// }
-
-
-// // Helper function to get price from Pyth oracle
-// fn get_price_from_oracle(price_update: &Account<PriceUpdateV2>) -> Result<u64> {
-//     let feed_id = get_feed_id_from_hex("0xef0d8b6fda2ceba41da15d4095d1da392a0d2f8ed0c6c7bc0f4cfac8c280b56d")
-//         .map_err(|_| error!(ErrorCode::InvalidOracleAccount))?;
-
-//     let current_clock = Clock::get()?; // Do not extract `unix_timestamp` yet
-
-//     // Pass the entire `current_clock` reference instead of `current_clock.unix_timestamp`
-//     let price_data = price_update
-//         .get_price_no_older_than(&current_clock, 60, &feed_id)
-//         .map_err(|_| ErrorCode::StaleOraclePrice)?;
-
-//     let conf_interval = price_data.conf as f64 / price_data.price as f64;
-//     require!(conf_interval <= 0.01, ErrorCode::PriceConfidenceTooLow);
-
-//     let price_u64 = (price_data.price as f64 * 1_000_000f64) as u64;
-//     Ok(price_u64)
-// }
+    Ok(())
+}
 

@@ -9,13 +9,13 @@ pub enum OrderType {
     TakeProfit,
 }
 
-#[derive(AnchorSerialize, AnchorDeserialize, Clone, PartialEq, Copy)]
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, PartialEq, Copy, Debug)]
 pub enum Side {
     Long,
     Short,
 }
 
-#[derive(AnchorSerialize, AnchorDeserialize, Clone, PartialEq, Copy)]
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, PartialEq, Copy, Debug)]
 pub enum MarginType {
     Isolated,
     Cross,
