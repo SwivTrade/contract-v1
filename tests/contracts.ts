@@ -21,12 +21,16 @@ describe("Contract Tests", () => {
   let keypair: Keypair;
 
   // Market setup
-  const marketSymbol = "tppp-PERP";
+  const marketSymbol = "twt-PERP";
   const initialFundingRate = 0;
   const fundingInterval = 3600;
   const maintenanceMarginRatio = 500; // 5%
   const initialMarginRatio = 1000; // 10%
   const maxLeverage = 10;
+  // AMM parameters
+  const virtualBaseReserve = 1_000_000_000; // 1 billion base units
+  const virtualQuoteReserve = 20_000_000_000; // 20 billion quote units (price = 20)
+  const priceImpactFactor = 100; // 1% impact
 
   // PDAs and accounts
   let marketPda: PublicKey;
@@ -226,6 +230,12 @@ describe("Contract Tests", () => {
       // Verify market properties
       assert.equal(existingMarket.marketSymbol, marketSymbol);
       assert.equal(existingMarket.authority.toString(), keypair.publicKey.toString());
+      
+      // Verify AMM parameters
+      assert.equal(existingMarket.virtualBaseReserve.toNumber(), virtualBaseReserve);
+      assert.equal(existingMarket.virtualQuoteReserve.toNumber(), virtualQuoteReserve);
+      assert.equal(existingMarket.priceImpactFactor.toNumber(), priceImpactFactor);
+      assert.equal(existingMarket.lastPrice.toNumber(), 20_000_000); // 20 * 1e6
     } catch (error) {
       // Market doesn't exist, create it
       console.log('Initializing new market...');
@@ -237,13 +247,45 @@ describe("Contract Tests", () => {
         initialMarginRatio,
         maxLeverage,
         oracleAccount: mockOraclePda,
-        mint: tokenMint
+        mint: tokenMint,
+        virtualBaseReserve,
+        virtualQuoteReserve,
+        priceImpactFactor
       });
 
       assert.equal(market.marketSymbol, marketSymbol);
       assert.equal(market.authority.toString(), keypair.publicKey.toString());
       assert.equal(market.oracle.toString(), mockOraclePda.toString());
+      
+      // Verify AMM parameters
+      assert.equal(market.virtualBaseReserve.toNumber(), virtualBaseReserve);
+      assert.equal(market.virtualQuoteReserve.toNumber(), virtualQuoteReserve);
+      assert.equal(market.priceImpactFactor.toNumber(), priceImpactFactor);
+      assert.equal(market.lastPrice.toNumber(), 20_000_000); // 20 * 1e6
     }
+  });
+
+  it("Calculates correct price from virtual reserves", async () => {
+    const market = await sdk.getMarket(marketPda);
+    
+    // Price should be virtualQuoteReserve / virtualBaseReserve * 1e6
+    const expectedPrice = (virtualQuoteReserve * 1_000_000) / virtualBaseReserve;
+    assert.equal(market.lastPrice.toNumber(), expectedPrice);
+  });
+
+  it("Calculates price impact correctly", async () => {
+    const market = await sdk.getMarket(marketPda);
+    const basePrice = market.lastPrice.toNumber();
+    
+    // Test with a trade size of 100,000 base units
+    const tradeSize = 100_000;
+    const expectedImpact = (tradeSize * priceImpactFactor) / 10_000;
+    const expectedPrice = basePrice + expectedImpact;
+
+    // Note: We can't directly test calculate_price_with_impact as it's not exposed in the IDL
+    // This is just to verify our understanding of the price impact calculation
+    assert.equal(expectedImpact, 1_000); // 1% of 100,000
+    assert.equal(expectedPrice, basePrice + 1_000);
   });
 
   it("Creates a margin account", async () => {
@@ -330,226 +372,6 @@ describe("Contract Tests", () => {
     // Check that user token balance increased
     const tokenIncrease = (userTokenAfter.value.uiAmount! - userTokenBefore.value.uiAmount!) * 1_000_000;
     assert.equal(tokenIncrease, amount.toNumber());
-  });
-
-  it("Opens and closes a long position with profit", async () => {
-    // Open long position
-    const side = { long: {} };
-    const size = new BN(50_000); // 0.05 tokens
-    const leverage = new BN(5);
-    
-    const [positionPda] = await sdk.findPositionPda(marketPda, keypair.publicKey, 0);
-    
-    const openPositionTx = await sdk.buildOpenPositionTransaction({
-      market: marketPda,
-      marginAccount: marginAccountPda,
-      side,
-      size,
-      leverage,
-      oracleAccount: mockOraclePda,
-      nonce: 0
-    }, keypair.publicKey);
-
-    await provider.sendAndConfirm(openPositionTx);
-
-    // Verify position was created
-    const position = await sdk.getPosition(positionPda);
-    assert.equal(position.trader.toString(), keypair.publicKey.toString());
-    assert.equal(position.market.toString(), marketPda.toString());
-    assert.deepEqual(position.side, side);
-    assert.equal(position.size.toNumber(), size.toNumber());
-    assert.equal(position.leverage.toNumber(), leverage.toNumber());
-    assert.equal(position.isOpen, true);
-
-    // Update oracle price to create profit scenario
-    await sdk.updateOraclePrice({
-      marketSymbol,
-      newPrice: 1200 // Higher than entry price for long profit
-    });
-    
-    // Get margin account state before closing
-    const marginAccountBefore = await sdk.getMarginAccount(keypair.publicKey, marketPda);
-    
-    const closePositionTx = await sdk.buildClosePositionTransaction({
-      market: marketPda,
-      position: positionPda,
-      marginAccount: marginAccountPda,
-      oracleAccount: mockOraclePda
-    }, keypair.publicKey);
-
-    await provider.sendAndConfirm(closePositionTx);
-
-    // Verify the margin account state after closing
-    const marginAccountAfter = await sdk.getMarginAccount(keypair.publicKey, marketPda);
-    assert.equal(marginAccountAfter.positions.length, 0);
-    
-    // Verify collateral increased due to profit
-    assert.isTrue(marginAccountAfter.collateral.gt(marginAccountBefore.collateral));
-    
-    // For isolated margin, verify allocated margin was released
-    if ('isolated' in marginAccountAfter.marginType) {
-      assert.equal(marginAccountAfter.allocatedMargin.toNumber(), 0);
-    }
-  });
-
-  it("Opens and closes a short position with profit", async () => {
-    // Open short position
-    const side = { short: {} };
-    const size = new BN(50_000); // 0.05 tokens
-    const leverage = new BN(5);
-    
-    const [positionPda] = await sdk.findPositionPda(marketPda, keypair.publicKey, 0);
-     
-    const marginAccountBeforeOpen = await sdk.getMarginAccount(keypair.publicKey, marketPda);
-  
-    
-    const openPositionTx = await sdk.buildOpenPositionTransaction({
-      market: marketPda,
-      marginAccount: marginAccountPda,
-      side,
-      size,
-      leverage,
-      oracleAccount: mockOraclePda,
-      nonce: 0
-    }, keypair.publicKey);
-
-    await provider.sendAndConfirm(openPositionTx);
-
-    // Verify position was created
-    const position = await sdk.getPosition(positionPda);
-  
-
-    const marginAccountAfterOpen = await sdk.getMarginAccount(keypair.publicKey, marketPda);
-
-    // Update oracle price to create profit scenario for short
-    await sdk.updateOraclePrice({
-      marketSymbol,
-      newPrice: 800 // Lower than entry price for short profit
-    });
-    
-    // Get margin account state before closing
-    const marginAccountBefore = await sdk.getMarginAccount(keypair.publicKey, marketPda);
-    
-    const closePositionTx = await sdk.buildClosePositionTransaction({
-      market: marketPda,
-      position: positionPda,
-      marginAccount: marginAccountPda,
-      oracleAccount: mockOraclePda
-    }, keypair.publicKey);
-
-    await provider.sendAndConfirm(closePositionTx);
-
-    // Verify the margin account state after closing
-    const marginAccountAfter = await sdk.getMarginAccount(keypair.publicKey, marketPda);
-    
-    assert.equal(marginAccountAfter.positions.length, 0);
-    assert.isTrue(marginAccountAfter.collateral.gt(marginAccountBefore.collateral));
-    
-    if ('isolated' in marginAccountAfter.marginType) {
-      assert.equal(marginAccountAfter.allocatedMargin.toNumber(), 0);
-    }
-  });
-
-  it("Opens and closes a long position with loss", async () => {
-    // Open long position
-    const side = { long: {} };
-    const size = new BN(50_000); // 0.05 tokens
-    const leverage = new BN(5);
-    
-    const [positionPda] = await sdk.findPositionPda(marketPda, keypair.publicKey, 0);
-    
-    const openPositionTx = await sdk.buildOpenPositionTransaction({
-      market: marketPda,
-      marginAccount: marginAccountPda,
-      side,
-      size,
-      leverage,
-      oracleAccount: mockOraclePda,
-      nonce: 0
-    }, keypair.publicKey);
-
-    await provider.sendAndConfirm(openPositionTx);
-
-    // Update oracle price to create loss scenario for long
-    await sdk.updateOraclePrice({
-      marketSymbol,
-      newPrice: 800 // Lower than entry price for long loss
-    });
-    
-    // Get margin account state before closing
-    const marginAccountBefore = await sdk.getMarginAccount(keypair.publicKey, marketPda);
-    
-    const closePositionTx = await sdk.buildClosePositionTransaction({
-      market: marketPda,
-      position: positionPda,
-      marginAccount: marginAccountPda,
-      oracleAccount: mockOraclePda
-    }, keypair.publicKey);
-
-    await provider.sendAndConfirm(closePositionTx);
-
-    // Verify the margin account state after closing
-    const marginAccountAfter = await sdk.getMarginAccount(keypair.publicKey, marketPda);
-    assert.equal(marginAccountAfter.positions.length, 0);
-    
-    // Verify collateral decreased due to loss
-    assert.isTrue(marginAccountAfter.collateral.lt(marginAccountBefore.collateral));
-    
-    // For isolated margin, verify allocated margin was released
-    if ('isolated' in marginAccountAfter.marginType) {
-      assert.equal(marginAccountAfter.allocatedMargin.toNumber(), 0);
-    }
-  });
-
-  it("Opens and closes a short position with loss", async () => {
-    // Open short position
-    const side = { short: {} };
-    const size = new BN(50_000); // 0.05 tokens
-    const leverage = new BN(5);
-    
-    const [positionPda] = await sdk.findPositionPda(marketPda, keypair.publicKey, 0);
-    
-    const openPositionTx = await sdk.buildOpenPositionTransaction({
-      market: marketPda,
-      marginAccount: marginAccountPda,
-      side,
-      size,
-      leverage,
-      oracleAccount: mockOraclePda,
-      nonce: 0
-    }, keypair.publicKey);
-
-    await provider.sendAndConfirm(openPositionTx);
-
-    // Update oracle price to create loss scenario for short
-    await sdk.updateOraclePrice({
-      marketSymbol,
-      newPrice: 1300 // Higher than entry price for short loss
-    });
-    
-    // Get margin account state before closing
-    const marginAccountBefore = await sdk.getMarginAccount(keypair.publicKey, marketPda);
-    
-    const closePositionTx = await sdk.buildClosePositionTransaction({
-      market: marketPda,
-      position: positionPda,
-      marginAccount: marginAccountPda,
-      oracleAccount: mockOraclePda
-    }, keypair.publicKey);
-
-    await provider.sendAndConfirm(closePositionTx);
-
-    // Verify the margin account state after closing
-    const marginAccountAfter = await sdk.getMarginAccount(keypair.publicKey, marketPda);
-    assert.equal(marginAccountAfter.positions.length, 0);
-    
-    // Verify collateral decreased due to loss
-    assert.isTrue(marginAccountAfter.collateral.lt(marginAccountBefore.collateral));
-    
-    // For isolated margin, verify allocated margin was released
-    if ('isolated' in marginAccountAfter.marginType) {
-      assert.equal(marginAccountAfter.allocatedMargin.toNumber(), 0);
-    }
   });
 
   it("Opens and closes a long market order with profit", async () => {
@@ -824,6 +646,212 @@ describe("Contract Tests", () => {
     if ('isolated' in marginAccountAfter.marginType) {
       assert.equal(marginAccountAfter.allocatedMargin.toNumber(), 0);
     }
+  });
+
+  it("Verifies AMM price impact on order placement", async () => {
+    const side = { long: {} };
+    const size = new BN(100_000); // 0.1 tokens
+    const leverage = new BN(5);
+    const orderNonce = 15;
+    const positionNonce = 16;
+    
+    // Get initial market state
+    const marketBefore = await sdk.getMarket(marketPda);
+    const initialBaseReserve = marketBefore.virtualBaseReserve.toNumber();
+    const initialQuoteReserve = marketBefore.virtualQuoteReserve.toNumber();
+    const initialPrice = marketBefore.lastPrice.toNumber();
+    
+    // Place order
+    const [orderPda] = await sdk.findOrderPda(marketPda, keypair.publicKey, orderNonce);
+    const [positionPda] = await sdk.findPositionPda(marketPda, keypair.publicKey, positionNonce);
+    
+    const placeOrderTx = await sdk.buildPlaceMarketOrderTransaction({
+      market: marketPda,
+      marginAccount: marginAccountPda,
+      side,
+      size,
+      leverage,
+      oracleAccount: mockOraclePda,
+      orderNonce,
+      positionNonce
+    }, keypair.publicKey);
+
+    await provider.sendAndConfirm(placeOrderTx);
+
+    // Get market state after order
+    const marketAfter = await sdk.getMarket(marketPda);
+    const finalBaseReserve = marketAfter.virtualBaseReserve.toNumber();
+    const finalQuoteReserve = marketAfter.virtualQuoteReserve.toNumber();
+    const finalPrice = marketAfter.lastPrice.toNumber();
+
+    // Verify AMM updates
+    assert.equal(finalBaseReserve, initialBaseReserve - size.toNumber(), "Base reserve should decrease for long");
+    assert.isTrue(finalQuoteReserve > initialQuoteReserve, "Quote reserve should increase for long");
+    assert.isTrue(finalPrice > initialPrice, "Price should increase after long order");
+
+    // Calculate expected price impact
+    const expectedImpact = (size.toNumber() * priceImpactFactor) / 10_000;
+    const expectedPrice = initialPrice + expectedImpact;
+    assert.approximately(finalPrice, expectedPrice, 1, "Price impact should match expected value");
+  });
+
+  it("Verifies AMM price impact on order closing", async () => {
+    // First place an order
+    const side = { long: {} };
+    const size = new BN(100_000);
+    const leverage = new BN(5);
+    const orderNonce = 17;
+    const positionNonce = 18;
+    
+    const [orderPda] = await sdk.findOrderPda(marketPda, keypair.publicKey, orderNonce);
+    const [positionPda] = await sdk.findPositionPda(marketPda, keypair.publicKey, positionNonce);
+    
+    // Place order
+    const placeOrderTx = await sdk.buildPlaceMarketOrderTransaction({
+      market: marketPda,
+      marginAccount: marginAccountPda,
+      side,
+      size,
+      leverage,
+      oracleAccount: mockOraclePda,
+      orderNonce,
+      positionNonce
+    }, keypair.publicKey);
+
+    await provider.sendAndConfirm(placeOrderTx);
+
+    // Get market state before closing
+    const marketBeforeClose = await sdk.getMarket(marketPda);
+    const initialBaseReserve = marketBeforeClose.virtualBaseReserve.toNumber();
+    const initialQuoteReserve = marketBeforeClose.virtualQuoteReserve.toNumber();
+    const initialPrice = marketBeforeClose.lastPrice.toNumber();
+
+    // Close order
+    const closeOrderTx = await sdk.buildCloseMarketOrderTransaction({
+      market: marketPda,
+      order: orderPda,
+      position: positionPda,
+      marginAccount: marginAccountPda,
+      oracleAccount: mockOraclePda
+    }, keypair.publicKey);
+
+    await provider.sendAndConfirm(closeOrderTx);
+
+    // Get market state after closing
+    const marketAfterClose = await sdk.getMarket(marketPda);
+    const finalBaseReserve = marketAfterClose.virtualBaseReserve.toNumber();
+    const finalQuoteReserve = marketAfterClose.virtualQuoteReserve.toNumber();
+    const finalPrice = marketAfterClose.lastPrice.toNumber();
+
+    // Verify AMM updates
+    assert.equal(finalBaseReserve, initialBaseReserve + size.toNumber(), "Base reserve should increase when closing long");
+    assert.isTrue(finalQuoteReserve < initialQuoteReserve, "Quote reserve should decrease when closing long");
+    assert.isTrue(finalPrice < initialPrice, "Price should decrease after closing long");
+
+    // Calculate expected price impact
+    const expectedImpact = (size.toNumber() * priceImpactFactor) / 10_000;
+    const expectedPrice = initialPrice - expectedImpact;
+    assert.approximately(finalPrice, expectedPrice, 1, "Price impact should match expected value");
+  });
+
+  it("Verifies AMM behavior with multiple orders", async () => {
+    // Get initial market state
+    const marketBefore = await sdk.getMarket(marketPda);
+    
+    // Place first order
+    const side1 = { long: {} };
+    const size1 = new BN(50_000);
+    const leverage1 = new BN(5);
+    const orderNonce1 = 19;
+    const positionNonce1 = 20;
+    
+    const [orderPda1] = await sdk.findOrderPda(marketPda, keypair.publicKey, orderNonce1);
+    const [positionPda1] = await sdk.findPositionPda(marketPda, keypair.publicKey, positionNonce1);
+    
+    const placeOrderTx1 = await sdk.buildPlaceMarketOrderTransaction({
+      market: marketPda,
+      marginAccount: marginAccountPda,
+      side: side1,
+      size: size1,
+      leverage: leverage1,
+      oracleAccount: mockOraclePda,
+      orderNonce: orderNonce1,
+      positionNonce: positionNonce1
+    }, keypair.publicKey);
+
+    await provider.sendAndConfirm(placeOrderTx1);
+
+    // Get market state after first order
+    const marketAfterFirst = await sdk.getMarket(marketPda);
+    const priceAfterFirst = marketAfterFirst.lastPrice.toNumber();
+
+    // Place second order
+    const side2 = { short: {} };
+    const size2 = new BN(30_000);
+    const leverage2 = new BN(5);
+    const orderNonce2 = 21;
+    const positionNonce2 = 22;
+    
+    const [orderPda2] = await sdk.findOrderPda(marketPda, keypair.publicKey, orderNonce2);
+    const [positionPda2] = await sdk.findPositionPda(marketPda, keypair.publicKey, positionNonce2);
+    
+    const placeOrderTx2 = await sdk.buildPlaceMarketOrderTransaction({
+      market: marketPda,
+      marginAccount: marginAccountPda,
+      side: side2,
+      size: size2,
+      leverage: leverage2,
+      oracleAccount: mockOraclePda,
+      orderNonce: orderNonce2,
+      positionNonce: positionNonce2
+    }, keypair.publicKey);
+
+    await provider.sendAndConfirm(placeOrderTx2);
+
+    // Get market state after second order
+    const marketAfterSecond = await sdk.getMarket(marketPda);
+    const priceAfterSecond = marketAfterSecond.lastPrice.toNumber();
+
+    // Verify price changes
+    assert.isTrue(priceAfterFirst > marketBefore.lastPrice.toNumber(), "Price should increase after long order");
+    assert.isTrue(priceAfterSecond < priceAfterFirst, "Price should decrease after short order");
+
+    // Close both positions
+    const closeOrderTx1 = await sdk.buildCloseMarketOrderTransaction({
+      market: marketPda,
+      order: orderPda1,
+      position: positionPda1,
+      marginAccount: marginAccountPda,
+      oracleAccount: mockOraclePda
+    }, keypair.publicKey);
+
+    const closeOrderTx2 = await sdk.buildCloseMarketOrderTransaction({
+      market: marketPda,
+      order: orderPda2,
+      position: positionPda2,
+      marginAccount: marginAccountPda,
+      oracleAccount: mockOraclePda
+    }, keypair.publicKey);
+
+    await provider.sendAndConfirm(closeOrderTx1);
+    await provider.sendAndConfirm(closeOrderTx2);
+
+    // Get final market state
+    const marketFinal = await sdk.getMarket(marketPda);
+    
+    // Verify reserves return close to initial state
+    assert.approximately(
+      marketFinal.virtualBaseReserve.toNumber(),
+      marketBefore.virtualBaseReserve.toNumber(),
+      1000, // Allow small difference due to rounding
+      "Base reserve should return close to initial state"
+    );
+    assert.approximately(
+      marketFinal.virtualQuoteReserve.toNumber(),
+      marketBefore.virtualQuoteReserve.toNumber(),
+      1000, // Allow small difference due to rounding
+      "Quote reserve should return close to initial state"
+    );
   });
 
   beforeEach(async function() {

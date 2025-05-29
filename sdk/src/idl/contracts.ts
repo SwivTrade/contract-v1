@@ -5,7 +5,7 @@
  * IDL can be found at `target/idl/contracts.json`.
  */
 export type Contracts = {
-  "address": "7gipafAxz4KSLL4Ja54aBEA86nMB4oAiW6qfZVW3qd6q",
+  "address": "AGKouVPJm4D8hnY82r1FLYN6Cr7Dn15LjXfos6xbas5y",
   "metadata": {
     "name": "contracts",
     "version": "0.1.0",
@@ -335,6 +335,18 @@ export type Contracts = {
         },
         {
           "name": "maxLeverage",
+          "type": "u64"
+        },
+        {
+          "name": "virtualBaseReserve",
+          "type": "u64"
+        },
+        {
+          "name": "virtualQuoteReserve",
+          "type": "u64"
+        },
+        {
+          "name": "priceImpactFactor",
           "type": "u64"
         },
         {
@@ -1083,6 +1095,11 @@ export type Contracts = {
       "code": 6034,
       "name": "invalidVault",
       "msg": "Invalid vault provided"
+    },
+    {
+      "code": 6035,
+      "name": "invalidAmmState",
+      "msg": "Invalid AMM state - virtual reserves cannot be zero"
     }
   ],
   "types": [
@@ -1372,6 +1389,26 @@ export type Contracts = {
           {
             "name": "bump",
             "type": "u8"
+          },
+          {
+            "name": "virtualBaseReserve",
+            "type": "u64"
+          },
+          {
+            "name": "virtualQuoteReserve",
+            "type": "u64"
+          },
+          {
+            "name": "priceImpactFactor",
+            "type": "u64"
+          },
+          {
+            "name": "lastPrice",
+            "type": "u64"
+          },
+          {
+            "name": "lastUpdateTime",
+            "type": "i64"
           }
         ]
       }
@@ -1411,6 +1448,22 @@ export type Contracts = {
           },
           {
             "name": "maxLeverage",
+            "type": "u64"
+          },
+          {
+            "name": "virtualBaseReserve",
+            "type": "u64"
+          },
+          {
+            "name": "virtualQuoteReserve",
+            "type": "u64"
+          },
+          {
+            "name": "priceImpactFactor",
+            "type": "u64"
+          },
+          {
+            "name": "initialPrice",
             "type": "u64"
           }
         ]

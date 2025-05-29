@@ -10,9 +10,7 @@ pub mod state;
 use instructions::*;
 use state::*;
 
-// declare_id!("s2zmrr2SqcwCdeAGRiPFftDSV9CRhXqAbRcMgmh4goC");
-// declare_id!("2nga8op3u3j7Df7wsQv2n5hkRqjEFLjkWGGAfn4aHsfy");
-declare_id!("7gipafAxz4KSLL4Ja54aBEA86nMB4oAiW6qfZVW3qd6q");
+declare_id!("AGKouVPJm4D8hnY82r1FLYN6Cr7Dn15LjXfos6xbas5y");    
 
 #[program]
 pub mod contracts {
@@ -26,6 +24,9 @@ pub mod contracts {
         maintenance_margin_ratio: u64,
         initial_margin_ratio: u64,
         max_leverage: u64,
+        virtual_base_reserve: u64,
+        virtual_quote_reserve: u64,
+        price_impact_factor: u64,
         bump: u8,
     ) -> Result<()> {
         instructions::market::initialize_market(
@@ -36,6 +37,9 @@ pub mod contracts {
             maintenance_margin_ratio,
             initial_margin_ratio,
             max_leverage,
+            virtual_base_reserve,
+            virtual_quote_reserve,
+            price_impact_factor,
             bump,
         )
     }

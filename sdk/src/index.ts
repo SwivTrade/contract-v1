@@ -121,6 +121,9 @@ export class PerpetualSwapSDK {
         new BN(params.maintenanceMarginRatio),
         new BN(params.initialMarginRatio),
         new BN(params.maxLeverage),
+        new BN(params.virtualBaseReserve),
+        new BN(params.virtualQuoteReserve),
+        new BN(params.priceImpactFactor),
         marketBump
       )
       .accountsStrict({

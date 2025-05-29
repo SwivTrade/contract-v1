@@ -12,6 +12,11 @@ pub struct MarketInitializedEvent {
     pub maintenance_margin_ratio: u64,
     pub initial_margin_ratio: u64,
     pub max_leverage: u64,
+    // AMM parameters
+    pub virtual_base_reserve: u64,
+    pub virtual_quote_reserve: u64,
+    pub price_impact_factor: u64,
+    pub initial_price: u64,
 }
 
 #[event]
@@ -135,6 +140,20 @@ pub struct OrderCancelledEvent {
     pub market: Pubkey,
     pub order: Pubkey,
     pub trader: Pubkey,
+}
+
+#[event]
+pub struct OrderClosedEvent {
+    pub market: Pubkey,
+    pub order: Pubkey,
+    pub position: Pubkey,
+    pub trader: Pubkey,
+    pub side: Side,
+    pub size: u64,
+    pub entry_price: u64,
+    pub exit_price: u64,
+    pub pnl: i64,
+    pub timestamp: i64,
 }
 
 // Collateral Events
