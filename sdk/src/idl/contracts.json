@@ -1,5 +1,5 @@
 {
-  "address": "7gipafAxz4KSLL4Ja54aBEA86nMB4oAiW6qfZVW3qd6q",
+  "address": "BSRWveJobC6xFCuo3wqwGGa4N1Kqcoc9r8H2AzCavvpg",
   "metadata": {
     "name": "contracts",
     "version": "0.1.0",
@@ -329,6 +329,18 @@
         },
         {
           "name": "max_leverage",
+          "type": "u64"
+        },
+        {
+          "name": "virtual_base_reserve",
+          "type": "u64"
+        },
+        {
+          "name": "virtual_quote_reserve",
+          "type": "u64"
+        },
+        {
+          "name": "price_impact_factor",
           "type": "u64"
         },
         {
@@ -1077,6 +1089,11 @@
       "code": 6034,
       "name": "InvalidVault",
       "msg": "Invalid vault provided"
+    },
+    {
+      "code": 6035,
+      "name": "InvalidAMMState",
+      "msg": "Invalid AMM state - virtual reserves cannot be zero"
     }
   ],
   "types": [
@@ -1366,6 +1383,26 @@
           {
             "name": "bump",
             "type": "u8"
+          },
+          {
+            "name": "virtual_base_reserve",
+            "type": "u64"
+          },
+          {
+            "name": "virtual_quote_reserve",
+            "type": "u64"
+          },
+          {
+            "name": "price_impact_factor",
+            "type": "u64"
+          },
+          {
+            "name": "last_price",
+            "type": "u64"
+          },
+          {
+            "name": "last_update_time",
+            "type": "i64"
           }
         ]
       }
@@ -1405,6 +1442,22 @@
           },
           {
             "name": "max_leverage",
+            "type": "u64"
+          },
+          {
+            "name": "virtual_base_reserve",
+            "type": "u64"
+          },
+          {
+            "name": "virtual_quote_reserve",
+            "type": "u64"
+          },
+          {
+            "name": "price_impact_factor",
+            "type": "u64"
+          },
+          {
+            "name": "initial_price",
             "type": "u64"
           }
         ]

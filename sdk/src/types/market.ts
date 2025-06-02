@@ -18,6 +18,11 @@ export interface Market {
   vault: PublicKey;
   isActive: boolean;
   bump: number;
+  virtualBaseReserve: BN;
+  virtualQuoteReserve: BN;
+  priceImpactFactor: BN;
+  lastPrice: BN;
+  lastUpdateTime: BN;
 }
 
 export interface InitializeMarketParams {
@@ -29,4 +34,7 @@ export interface InitializeMarketParams {
   maxLeverage: number;
   oracleAccount: PublicKey;
   mint: PublicKey;
+  virtualBaseReserve: number;
+  virtualQuoteReserve: number;
+  priceImpactFactor: number;
 } 

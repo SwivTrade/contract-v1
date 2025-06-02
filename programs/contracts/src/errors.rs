@@ -72,4 +72,6 @@ pub enum ErrorCode {
     WithdrawalExceedsAvailableMargin,
     #[msg("Invalid vault provided")]
     InvalidVault,
+    #[msg("Invalid AMM state - virtual reserves cannot be zero")]
+    InvalidAMMState,
 }

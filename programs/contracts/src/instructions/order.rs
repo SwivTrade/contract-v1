@@ -1,6 +1,9 @@
+use crate::{
+    errors::ErrorCode,
+    events::*,
+    {MarginAccount, MarginType, Market, Order, OrderType, Position, Side},
+};
 use anchor_lang::prelude::*;
-use mock_oracle::Oracle;
-use crate::{errors::ErrorCode, events::*, {Market, Order, OrderType, Side, MarginAccount, MarginType, Position}};
 
 #[derive(Accounts)]
 #[instruction(side: Side, size: u64, leverage: u64, order_bump: u8, position_bump: u8, order_nonce: u8, position_nonce: u8)]
@@ -61,65 +64,93 @@ pub fn place_market_order(
     require!(leverage <= market.max_leverage, ErrorCode::LeverageTooHigh);
     require!(size > 0, ErrorCode::InvalidOrderSize);
 
-    // Get current price from oracle
-    let oracle_data = ctx.accounts.price_update.try_borrow_data()?;
-    let oracle = Oracle::try_deserialize(&mut oracle_data.as_ref())?;
-    let current_price = oracle.price;
+    msg!("Order parameters:");
+    msg!("Size: {}", size);
+    msg!("Leverage: {}", leverage);
+    msg!("Initial margin ratio: {}", market.initial_margin_ratio);
 
-    // Calculate required collateral
-    // Scale price by 1e6 to match token decimals
-    let scaled_price = current_price
-        .checked_mul(1_000_000)
-        .ok_or(ErrorCode::MathOverflow)?;
+    // Calculate price with impact
+    let price_with_impact = market.calculate_price_with_impact(
+        size,
+        false // Opening position
+    )?;
+    msg!("Price with impact: {}", price_with_impact);
 
-    // Calculate position value with proper decimal handling
+    // Adjust price based on order side
+    let adjusted_price = match side {
+        Side::Long => price_with_impact,  // Long orders pay higher price
+        Side::Short => {
+            // For short orders, we need to subtract the impact from the base price
+            let base_price = market.calculate_price()?;
+            let impact = price_with_impact.checked_sub(base_price).ok_or(ErrorCode::MathOverflow)?;
+            base_price.checked_sub(impact).ok_or(ErrorCode::MathOverflow)?
+        }
+    };
+    msg!("Adjusted price for {}: {}", if matches!(side, Side::Long) { "long" } else { "short" }, adjusted_price);
+
+    // Calculate position value
     let position_value = size
-        .checked_mul(scaled_price)
+        .checked_mul(adjusted_price)
         .ok_or(ErrorCode::MathOverflow)?
-        .checked_div(1_000_000)  // Divide by 1e6 to get back to token decimals
+        .checked_div(1_000_000)  // Scale back to token decimals
         .ok_or(ErrorCode::MathOverflow)?;
+    msg!("Position value: {}", position_value);
 
-    let required_collateral = position_value
-        .checked_div(leverage)
-        .ok_or(ErrorCode::MathOverflow)?;
-
-    // Ensure minimum margin requirements are met
-    let min_required_margin = position_value
+    // Calculate required margin based on initial margin ratio and leverage
+    let required_margin = position_value
         .checked_mul(market.initial_margin_ratio)
         .ok_or(ErrorCode::MathOverflow)?
         .checked_div(10000)
+        .ok_or(ErrorCode::MathOverflow)?
+        .checked_div(leverage)
         .ok_or(ErrorCode::MathOverflow)?;
-
-    require!(required_collateral >= min_required_margin, ErrorCode::InsufficientMargin);
+    msg!("Required margin: {}", required_margin);
 
     // Check if there's enough available margin based on margin type
     match margin_account.margin_type {
         MarginType::Isolated => {
             // For isolated margin, check if there's enough available margin
             let available_margin = margin_account.available_margin()?;
-            require!(available_margin >= required_collateral, ErrorCode::InsufficientMargin);
-            
+            msg!("Isolated margin account:");
+            msg!("Total collateral: {}", margin_account.collateral);
+            msg!("Allocated margin: {}", margin_account.allocated_margin);
+            msg!("Available margin: {}", available_margin);
+            require!(
+                available_margin >= required_margin,
+                ErrorCode::InsufficientMargin
+            );
+
             // Allocate margin to this position
-            margin_account.allocated_margin = margin_account.allocated_margin
-                .checked_add(required_collateral)
+            margin_account.allocated_margin = margin_account
+                .allocated_margin
+                .checked_add(required_margin)
                 .ok_or(ErrorCode::MathOverflow)?;
-        },
+            msg!("New allocated margin: {}", margin_account.allocated_margin);
+        }
         MarginType::Cross => {
             // For cross margin, check if total margin is sufficient
-            require!(margin_account.collateral >= required_collateral, ErrorCode::InsufficientMargin);
+            msg!("Cross margin account:");
+            msg!("Total collateral: {}", margin_account.collateral);
+            require!(
+                margin_account.collateral >= required_margin,
+                ErrorCode::InsufficientMargin
+            );
         }
     }
+
+    // Update market state
+    market.update_reserves(&side, size)?;
 
     // Initialize order
     order.trader = trader.key();
     order.market = market.key();
     order.side = side;
     order.order_type = OrderType::Market;
-    order.price = current_price;
+    order.price = adjusted_price;
     order.size = size;
     order.filled_size = size; // Market orders fill immediately
     order.leverage = leverage;
-    order.collateral = required_collateral;
+    order.collateral = required_margin;
     order.created_at = current_timestamp;
     order.is_active = false; // Market orders complete immediately
     order.bump = order_bump;
@@ -129,8 +160,8 @@ pub fn place_market_order(
     position.market = market.key();
     position.side = side;
     position.size = size;
-    position.collateral = required_collateral;
-    position.entry_price = current_price;
+    position.collateral = required_margin;
+    position.entry_price = adjusted_price;
     position.entry_funding_rate = market.funding_rate;
     position.leverage = leverage;
     position.realized_pnl = 0;
@@ -139,20 +170,6 @@ pub fn place_market_order(
     position.liquidation_price = 0; // Will be calculated in a separate instruction
     position.is_open = true;
     position.bump = position_bump;
-
-    // Update market state
-    match side {
-        Side::Long => {
-            market.base_asset_reserve = market.base_asset_reserve
-                .checked_add(size)
-                .ok_or(ErrorCode::MathOverflow)?;
-        }
-        Side::Short => {
-            market.base_asset_reserve = market.base_asset_reserve
-                .checked_sub(size)
-                .ok_or(ErrorCode::MathOverflow)?;
-        }
-    }
 
     // Add order and position to margin account
     margin_account.orders.push(order.key());
@@ -165,7 +182,7 @@ pub fn place_market_order(
         trader: trader.key(),
         side,
         order_type: OrderType::Market,
-        price: current_price,
+        price: adjusted_price,
         size,
         leverage,
         timestamp: current_timestamp,
@@ -176,7 +193,7 @@ pub fn place_market_order(
         order: order.key(),
         trader: trader.key(),
         side,
-        price: current_price,
+        price: adjusted_price,
         size,
         filled_size: size,
         timestamp: current_timestamp,
@@ -223,27 +240,63 @@ pub fn close_market_order(ctx: Context<CloseMarketOrder>) -> Result<()> {
     let margin_account = &mut ctx.accounts.margin_account;
     let trader = &ctx.accounts.trader;
 
-    // Get current price from oracle
-    let oracle_data = ctx.accounts.price_update.try_borrow_data()?;
-    let oracle = Oracle::try_deserialize(&mut oracle_data.as_ref())?;
-    let current_price = oracle.price;
+    // Calculate price with impact for closing
+    let base_price = market.calculate_price()?;
+    msg!("Base price: {}", base_price);
 
-    // Calculate PnL
-    let entry_value = position.size
+    // Calculate price impact with simpler arithmetic
+    let impact_ratio = market.price_impact_factor.checked_div(100).ok_or(ErrorCode::MathOverflow)?;
+    msg!("Impact ratio: {}", impact_ratio);
+
+    // Scale down size first to avoid overflow
+    let scaled_size = position.size.checked_div(1_000_000).ok_or(ErrorCode::MathOverflow)?;
+    let price_impact = scaled_size
+        .checked_mul(impact_ratio)
+        .ok_or(ErrorCode::MathOverflow)?;
+    msg!("Price impact: {}", price_impact);
+
+    // Calculate final price with impact
+    let price_with_impact = base_price.checked_add(price_impact).ok_or(ErrorCode::MathOverflow)?;
+    msg!("Final price with impact: {}", price_with_impact);
+
+    // Adjust price based on position side (opposite of opening order)
+    let adjusted_price = match position.side {
+        Side::Long => {
+            // For closing long positions, we get a lower price
+            base_price.checked_sub(price_impact).ok_or(ErrorCode::MathOverflow)?
+        },
+        Side::Short => price_with_impact,  // For closing short positions, we get a higher price
+    };
+    msg!("Adjusted price for closing {}: {}", if matches!(position.side, Side::Long) { "long" } else { "short" }, adjusted_price);
+
+    // Calculate PnL with simpler arithmetic
+    let entry_value = scaled_size
         .checked_mul(position.entry_price)
         .ok_or(ErrorCode::MathOverflow)?;
-
-    let exit_value = position.size
-        .checked_mul(current_price)
+    
+    let exit_value = scaled_size
+        .checked_mul(adjusted_price)
         .ok_or(ErrorCode::MathOverflow)?;
 
-    let entry_value_i64 = entry_value as i64;
-    let exit_value_i64 = exit_value as i64;
-
+    // Calculate PnL based on position side
     let pnl = match position.side {
-        Side::Long => exit_value_i64.checked_sub(entry_value_i64),
-        Side::Short => entry_value_i64.checked_sub(exit_value_i64),
-    }.ok_or(ErrorCode::MathOverflow)?;
+        Side::Long => {
+            // For longs: PnL = exit_value - entry_value
+            exit_value.checked_sub(entry_value)
+        },
+        Side::Short => {
+            // For shorts: PnL = entry_value - exit_value
+            entry_value.checked_sub(exit_value)
+        }
+    }.ok_or(ErrorCode::MathOverflow)? as i64;
+
+    msg!("PnL calculation:");
+    msg!("Scaled size: {}", scaled_size);
+    msg!("Entry price: {}", position.entry_price);
+    msg!("Exit price: {}", adjusted_price);
+    msg!("Entry value: {}", entry_value);
+    msg!("Exit value: {}", exit_value);
+    msg!("PnL: {}", pnl);
 
     // Store values before accounts are closed
     let position_side = position.side;
@@ -254,56 +307,63 @@ pub fn close_market_order(ctx: Context<CloseMarketOrder>) -> Result<()> {
     let order_key = order.key();
 
     // Update market state
-    match position_side {
-        Side::Long => {
-            market.base_asset_reserve = market.base_asset_reserve
-                .checked_sub(position_size)
-                .ok_or(ErrorCode::MathOverflow)?;
-        }
-        Side::Short => {
-            market.base_asset_reserve = market.base_asset_reserve
-                .checked_add(position_size)
-                .ok_or(ErrorCode::MathOverflow)?;
-        }
-    }
+    market.update_reserves(&position_side, position_size)?;
 
     // Update margin account based on margin type
     match margin_account.margin_type {
         MarginType::Isolated => {
-            margin_account.allocated_margin = margin_account.allocated_margin
+            margin_account.allocated_margin = margin_account
+                .allocated_margin
                 .checked_sub(position_collateral)
                 .ok_or(ErrorCode::MathOverflow)?;
-            
+
             if pnl > 0 {
-                margin_account.collateral = margin_account.collateral
+                margin_account.collateral = margin_account
+                    .collateral
                     .checked_add(pnl as u64)
                     .ok_or(ErrorCode::MathOverflow)?;
             } else {
-                margin_account.collateral = margin_account.collateral
-                    .checked_sub((-pnl) as u64)
+                let abs_pnl = pnl.checked_abs().ok_or(ErrorCode::MathOverflow)?;
+                margin_account.collateral = margin_account
+                    .collateral
+                    .checked_sub(abs_pnl as u64)
                     .ok_or(ErrorCode::MathOverflow)?;
             }
-        },
+        }
         MarginType::Cross => {
             if pnl > 0 {
-                margin_account.collateral = margin_account.collateral
+                margin_account.collateral = margin_account
+                    .collateral
                     .checked_add(pnl as u64)
                     .ok_or(ErrorCode::MathOverflow)?;
             } else {
-                margin_account.collateral = margin_account.collateral
-                    .checked_sub((-pnl) as u64)
+                let abs_pnl = pnl.checked_abs().ok_or(ErrorCode::MathOverflow)?;
+                margin_account.collateral = margin_account
+                    .collateral
+                    .checked_sub(abs_pnl as u64)
                     .ok_or(ErrorCode::MathOverflow)?;
             }
         }
     }
 
     // Remove order and position from margin account's lists
-    if let Some(pos) = margin_account.positions.iter().position(|&p| p == position_key) {
+    if let Some(pos) = margin_account
+        .positions
+        .iter()
+        .position(|&p| p == position_key)
+    {
         margin_account.positions.remove(pos);
     }
     if let Some(ord) = margin_account.orders.iter().position(|&o| o == order_key) {
         margin_account.orders.remove(ord);
     }
+
+     // Close position
+     position.is_open = false;
+     position.realized_pnl = position.realized_pnl
+         .checked_add(pnl)
+         .ok_or(ErrorCode::MathOverflow)?;
+ 
 
     // Emit events
     emit!(OrderCancelledEvent {
@@ -320,11 +380,10 @@ pub fn close_market_order(ctx: Context<CloseMarketOrder>) -> Result<()> {
         size: position_size,
         collateral: position_collateral,
         entry_price: position_entry_price,
-        exit_price: current_price,
+        exit_price: adjusted_price,
         realized_pnl: pnl,
         margin_type: margin_account.margin_type,
     });
 
     Ok(())
 }
-
