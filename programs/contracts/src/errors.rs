@@ -74,4 +74,6 @@ pub enum ErrorCode {
     InvalidVault,
     #[msg("Invalid AMM state - virtual reserves cannot be zero")]
     InvalidAMMState,
+    #[msg("Trade size exceeds maximum allowed (10% of virtual reserves)")]
+    TradeSizeTooLarge,
 }

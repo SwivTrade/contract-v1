@@ -94,7 +94,7 @@ pub fn initialize_market(
     market.is_active = true;
     market.bump = bump;
 
-    // Initialize AMM parameters
+    // Initialize AMM parameters using passed parameters
     market.virtual_base_reserve = virtual_base_reserve;
     market.virtual_quote_reserve = virtual_quote_reserve;
     market.price_impact_factor = price_impact_factor;
