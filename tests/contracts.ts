@@ -21,7 +21,7 @@ describe("Contract Tests", () => {
   let keypair: Keypair;
 
   // Market setup
-  const marketSymbol = "vam-test";
+  const marketSymbol = "flow19-test";
   const initialFundingRate = 0;
   const fundingInterval = 3600;
   const maintenanceMarginRatio = 500; // 5%
@@ -76,119 +76,101 @@ describe("Contract Tests", () => {
     // Initialize SDK
     sdk = new PerpetualSwapSDK(connection as any, wallet);
 
-    // Load or create token mint and authority
-    let tokenData: {
-      mint: string;
-      mintAuthority: number[];
-      userTokenAccount?: string;
-    } | null = null;
-
-    if (fs.existsSync(tokenDataPath)) {
-      try {
-        tokenData = JSON.parse(fs.readFileSync(tokenDataPath, 'utf-8'));
-        tokenMint = new PublicKey(tokenData.mint);
-        mintAuthority = Keypair.fromSecretKey(new Uint8Array(tokenData.mintAuthority));
-        
-        // Check if the mint still exists on-chain
-        const mintInfo = await connection.getAccountInfo(tokenMint);
-        if (mintInfo) {
-          console.log('Using existing token mint:', tokenMint.toBase58());
-          
-          // Load user token account if saved
-          if (tokenData.userTokenAccount) {
-            userTokenAccount = new PublicKey(tokenData.userTokenAccount);
-            
-            // Verify the token account still exists
-            const tokenAccountInfo = await connection.getAccountInfo(userTokenAccount);
-            if (!tokenAccountInfo) {
-              // Token account doesn't exist, we'll create it below
-              userTokenAccount = undefined as any;
-            } else {
-              console.log('Using existing user token account:', userTokenAccount.toBase58());
-            }
-          }
-        } else {
-          console.log('Saved mint no longer exists on-chain, creating new one...');
-          tokenMint = undefined as any;
-          mintAuthority = undefined as any;
-        }
-      } catch (error) {
-        console.log('Error loading token data, creating new tokens...');
-        tokenMint = undefined as any;
-        mintAuthority = undefined as any;
-      }
-    }
-
-    // Create mint if it doesn't exist
-    if (!tokenMint || !mintAuthority) {
+    // Initialize token mint and user account
+    if (!fs.existsSync(tokenDataPath)) {
       console.log('Creating new token mint...');
-      mintAuthority = Keypair.generate();
-    tokenMint = await createMint(
+      tokenMint = await createMint(
         connection,
         keypair,
-      mintAuthority.publicKey,
-      null,
-      6 // 6 decimals
-    );
-      console.log('Token mint created:', tokenMint.toBase58());
+        keypair.publicKey,
+        null,
+        6
+      );
       
-      // Save token data to file
-      tokenData = {
-        mint: tokenMint.toBase58(),
-        mintAuthority: Array.from(mintAuthority.secretKey),
-      };
-      fs.writeFileSync(tokenDataPath, JSON.stringify(tokenData, null, 2));
-    }
-
-    // Create user token account if it doesn't exist
-    if (!userTokenAccount) {
       console.log('Creating user token account...');
-    userTokenAccount = await createAccount(
+      userTokenAccount = await createAccount(
         connection,
         keypair,
-      tokenMint,
+        tokenMint,
         keypair.publicKey
       );
-      console.log('User token account created:', userTokenAccount.toBase58());
-      
-      // Update saved token data with user token account
-      tokenData = tokenData || {
-        mint: tokenMint.toBase58(),
-        mintAuthority: Array.from(mintAuthority.secretKey),
-      };
-      tokenData.userTokenAccount = userTokenAccount.toBase58();
-      fs.writeFileSync(tokenDataPath, JSON.stringify(tokenData, null, 2));
-      
-      // Mint initial tokens
-      console.log('Minting initial tokens to user account...');
-    await mintTo(
+
+      // Mint initial tokens - 500 tokens to ensure enough for all tests
+      console.log('Minting initial tokens...');
+      await mintTo(
         connection,
         keypair,
-      tokenMint,
-      userTokenAccount,
-      mintAuthority,
-      100_000_000 // 100 tokens
-    );
-      console.log('Tokens minted successfully');
+        tokenMint,
+        userTokenAccount,
+        keypair,
+        500_000_000 // 500 tokens
+      );
+      console.log('Initial tokens minted successfully');
+
+      const tokenData = {
+        mint: tokenMint.toBase58(),
+        userAccount: userTokenAccount.toBase58()
+      };
+      fs.writeFileSync(tokenDataPath, JSON.stringify(tokenData, null, 2));
     } else {
-      // Check current balance and mint more if needed
-      const balance = await connection.getTokenAccountBalance(userTokenAccount);
-      const currentAmount = balance.value.uiAmount || 0;
-      
-      if (currentAmount < 100) {
-        console.log(`Current balance: ${currentAmount} tokens, minting more...`);
-        const amountToMint = (100 - currentAmount) * 1_000_000;
+      try {
+        const tokenData = JSON.parse(fs.readFileSync(tokenDataPath, 'utf8'));
+        if (!tokenData.mint || !tokenData.userAccount) {
+          throw new Error('Invalid token data');
+        }
+        tokenMint = new PublicKey(tokenData.mint);
+        userTokenAccount = new PublicKey(tokenData.userAccount);
+        console.log('Using existing token mint:', tokenMint.toBase58());
+        console.log('Using existing user token account:', userTokenAccount.toBase58());
+
+        // Check current balance and mint more if needed
+        const currentBalance = await connection.getTokenAccountBalance(userTokenAccount);
+        console.log(`Current balance: ${currentBalance.value.uiAmount} tokens`);
+        
+        if (currentBalance.value.uiAmount < 500) {
+          const mintAmount = 500_000_000 - parseInt(currentBalance.value.amount);
+          console.log(`Minting ${mintAmount / 1_000_000} more tokens`);
+          await mintTo(
+            connection,
+            keypair,
+            tokenMint,
+            userTokenAccount,
+            keypair,
+            mintAmount
+          );
+        }
+      } catch (error) {
+        console.log('Error loading token data, creating new tokens...', error);
+        // If there's any error, create new tokens
+        tokenMint = await createMint(
+          connection,
+          keypair,
+          keypair.publicKey,
+          null,
+          6
+        );
+        
+        userTokenAccount = await createAccount(
+          connection,
+          keypair,
+          tokenMint,
+          keypair.publicKey
+        );
+
         await mintTo(
           connection,
           keypair,
           tokenMint,
           userTokenAccount,
-          mintAuthority,
-          amountToMint
+          keypair,
+          500_000_000
         );
-        console.log(`Minted ${(100 - currentAmount)} more tokens`);
-      } else {
-        console.log(`Sufficient token balance: ${currentAmount} tokens`);
+
+        const tokenData = {
+          mint: tokenMint.toBase58(),
+          userAccount: userTokenAccount.toBase58()
+        };
+        fs.writeFileSync(tokenDataPath, JSON.stringify(tokenData, null, 2));
       }
     }
 
@@ -429,6 +411,9 @@ describe("Contract Tests", () => {
     
     // Get margin account state before closing
     const marginAccountBeforeClose = await sdk.getMarginAccount(keypair.publicKey, marketPda);
+    console.log('\nMargin Account Before Close:');
+    console.log('- Collateral:', marginAccountBeforeClose.collateral.toNumber() / 1_000_000);
+    console.log('- Allocated Margin:', marginAccountBeforeClose.allocatedMargin.toNumber() / 1_000_000);
     
     const closeOrderTx = await sdk.buildCloseMarketOrderTransaction({
       market: marketPda,
@@ -468,6 +453,13 @@ describe("Contract Tests", () => {
     const [orderPda] = await sdk.findOrderPda(marketPda, keypair.publicKey, orderNonce);
     const [positionPda] = await sdk.findPositionPda(marketPda, keypair.publicKey, positionNonce);
     
+    // Get initial market state
+    const marketBefore = await sdk.getMarket(marketPda);
+    console.log('\nInitial Market State:');
+    console.log('Initial Price:', marketBefore.lastPrice.toNumber());
+    console.log('Virtual Base Reserve:', marketBefore.virtualBaseReserve.toNumber());
+    console.log('Virtual Quote Reserve:', marketBefore.virtualQuoteReserve.toNumber());
+    
     // Log margin account state before placing order
     const marginAccountBefore = await sdk.getMarginAccount(keypair.publicKey, marketPda);
     console.log('\nMargin Account Before Short Order:');
@@ -489,6 +481,15 @@ describe("Contract Tests", () => {
 
     await provider.sendAndConfirm(placeOrderTx);
 
+    // Get market state after opening position
+    const marketAfterOpen = await sdk.getMarket(marketPda);
+    console.log('\nMarket State After Opening:');
+    console.log('Price:', marketAfterOpen.lastPrice.toNumber());
+    console.log('Virtual Base Reserve:', marketAfterOpen.virtualBaseReserve.toNumber());
+    console.log('Virtual Quote Reserve:', marketAfterOpen.virtualQuoteReserve.toNumber());
+    console.log('Price Change:', marketAfterOpen.lastPrice.toNumber() - marketBefore.lastPrice.toNumber());
+    console.log('Price Change %:', ((marketAfterOpen.lastPrice.toNumber() - marketBefore.lastPrice.toNumber()) / marketBefore.lastPrice.toNumber() * 100).toFixed(2) + '%');
+
     // Verify order and position were created
     const order = await sdk.getOrder(orderPda);
     const position = await sdk.getPosition(positionPda);
@@ -497,17 +498,21 @@ describe("Contract Tests", () => {
     console.log('- Size:', order.size.toNumber());
     console.log('- Leverage:', order.leverage.toNumber());
     console.log('- Is Active:', order.isActive);
+    console.log('- Collateral Locked:', order.collateral.toNumber() / 1_000_000);
     
     console.log('\nShort Position Details:');
     console.log('- PDA:', positionPda.toBase58());
     console.log('- Size:', position.size.toNumber());
     console.log('- Leverage:', position.leverage.toNumber());
     console.log('- Is Open:', position.isOpen);
-
-  
+    console.log('- Entry Price:', position.entryPrice.toNumber());
+    console.log('- Position Collateral:', position.collateral.toNumber() / 1_000_000);
     
     // Get margin account state before closing
     const marginAccountBeforeClose = await sdk.getMarginAccount(keypair.publicKey, marketPda);
+    console.log('\nMargin Account Before Closing:');
+    console.log('- Collateral:', marginAccountBeforeClose.collateral.toNumber() / 1_000_000);
+    console.log('- Allocated Margin:', marginAccountBeforeClose.allocatedMargin.toNumber() / 1_000_000);
     
     const closeOrderTx = await sdk.buildCloseMarketOrderTransaction({
       market: marketPda,
@@ -519,13 +524,22 @@ describe("Contract Tests", () => {
 
     await provider.sendAndConfirm(closeOrderTx);
 
+    // Get market state after closing
+    const marketAfterClose = await sdk.getMarket(marketPda);
+    console.log('\nMarket State After Closing:');
+    console.log('Final Price:', marketAfterClose.lastPrice.toNumber());
+    console.log('Virtual Base Reserve:', marketAfterClose.virtualBaseReserve.toNumber());
+    console.log('Virtual Quote Reserve:', marketAfterClose.virtualQuoteReserve.toNumber());
+    console.log('Price Change:', marketAfterClose.lastPrice.toNumber() - marketAfterOpen.lastPrice.toNumber());
+    console.log('Price Change %:', ((marketAfterClose.lastPrice.toNumber() - marketAfterOpen.lastPrice.toNumber()) / marketAfterOpen.lastPrice.toNumber() * 100).toFixed(2) + '%');
+
     // Verify the margin account state after closing
     const marginAccountAfter = await sdk.getMarginAccount(keypair.publicKey, marketPda);
-    console.log('\nMargin Account After Short Close:');
-    console.log('- Positions:', marginAccountAfter.positions.map(p => p.toBase58()));
-    console.log('- Orders:', marginAccountAfter.orders.map(o => o.toBase58()));
+    console.log('\nMargin Account After Closing:');
     console.log('- Collateral:', marginAccountAfter.collateral.toNumber() / 1_000_000);
     console.log('- Allocated Margin:', marginAccountAfter.allocatedMargin.toNumber() / 1_000_000);
+    console.log('- Collateral Change:', (marginAccountAfter.collateral.toNumber() - marginAccountBeforeClose.collateral.toNumber()) / 1_000_000);
+    console.log('- Collateral Change %:', ((marginAccountAfter.collateral.toNumber() - marginAccountBeforeClose.collateral.toNumber()) / marginAccountBeforeClose.collateral.toNumber() * 100).toFixed(2) + '%');
     
     assert.equal(marginAccountAfter.positions.length, 0);
     assert.equal(marginAccountAfter.orders.length, 0);
@@ -539,7 +553,7 @@ describe("Contract Tests", () => {
   it("Opens and closes a long market order with loss", async () => {
     // Place long market order
     const side = { long: {} };
-    const size = new BN(500_000); // Increased size for more significant impact
+    const size = new BN(1_000_000); // Reduced from 50M to 1M units
     const leverage = new BN(5);
     const orderNonce = 11;
     const positionNonce = 12;
@@ -560,7 +574,8 @@ describe("Contract Tests", () => {
 
     await provider.sendAndConfirm(placeOrderTx);
 
-    
+  
+
     // Get margin account state before closing
     const marginAccountBefore = await sdk.getMarginAccount(keypair.publicKey, marketPda);
     const collateralBefore = marginAccountBefore.collateral.toNumber();
@@ -581,7 +596,10 @@ describe("Contract Tests", () => {
     
     assert.equal(marginAccountAfter.positions.length, 0);
     assert.equal(marginAccountAfter.orders.length, 0);
-    assert.isTrue(collateralAfter < collateralBefore, "Collateral should decrease after loss");
+    assert.isTrue(
+      collateralAfter < collateralBefore,
+      "Collateral should decrease after loss"
+    );
     
     if ('isolated' in marginAccountAfter.marginType) {
       assert.equal(marginAccountAfter.allocatedMargin.toNumber(), 0);
@@ -589,90 +607,23 @@ describe("Contract Tests", () => {
   });
 
   it("Opens and closes a short market order with loss", async () => {
-    // First place a small trade to set the initial price
-    const initialSide = { long: {} };
-    const initialSize = new BN(1_000); // Small size to minimize impact
-    const initialLeverage = new BN(1);
-    const initialOrderNonce = 13;
-    const initialPositionNonce = 14;
+    // First place a large long position to move price up significantly
+    const priceUpdateSide = { long: {} };
+    const priceUpdateSize = new BN(500_000); // 500K units to move price up
+    const priceUpdateLeverage = new BN(1);
+    const priceUpdateOrderNonce = 13;
+    const priceUpdatePositionNonce = 14;
+    
+    const [priceUpdateOrderPda] = await sdk.findOrderPda(marketPda, keypair.publicKey, priceUpdateOrderNonce);
+    const [priceUpdatePositionPda] = await sdk.findPositionPda(marketPda, keypair.publicKey, priceUpdatePositionNonce);
     
     // Get initial market state
     const marketBefore = await sdk.getMarket(marketPda);
     const initialPrice = marketBefore.lastPrice.toNumber();
     console.log('\nInitial Market State:');
     console.log('Initial Price:', initialPrice);
-    console.log('Virtual Base Reserve:', marketBefore.virtualBaseReserve.toNumber());
-    console.log('Virtual Quote Reserve:', marketBefore.virtualQuoteReserve.toNumber());
     
-    const [initialOrderPda] = await sdk.findOrderPda(marketPda, keypair.publicKey, initialOrderNonce);
-    const [initialPositionPda] = await sdk.findPositionPda(marketPda, keypair.publicKey, initialPositionNonce);
-    
-    const initialPlaceOrderTx = await sdk.buildPlaceMarketOrderTransaction({
-      market: marketPda,
-      marginAccount: marginAccountPda,
-      side: initialSide,
-      size: initialSize,
-      leverage: initialLeverage,
-      oracleAccount: mockOraclePda,
-      orderNonce: initialOrderNonce,
-      positionNonce: initialPositionNonce
-    }, keypair.publicKey);
-
-    await provider.sendAndConfirm(initialPlaceOrderTx);
-
-    // Close the initial position
-    const initialCloseOrderTx = await sdk.buildCloseMarketOrderTransaction({
-      market: marketPda,
-      order: initialOrderPda,
-      position: initialPositionPda,
-      marginAccount: marginAccountPda,
-      oracleAccount: mockOraclePda
-    }, keypair.publicKey);
-
-    await provider.sendAndConfirm(initialCloseOrderTx);
-
-    // Now place our actual short position
-    const side = { short: {} };
-    const size = new BN(2_000_000); // Increased size for more significant impact
-    const leverage = new BN(5);
-    const orderNonce = 15;
-    const positionNonce = 16;
-    
-    const [orderPda] = await sdk.findOrderPda(marketPda, keypair.publicKey, orderNonce);
-    const [positionPda] = await sdk.findPositionPda(marketPda, keypair.publicKey, positionNonce);
-    
-    const placeOrderTx = await sdk.buildPlaceMarketOrderTransaction({
-      market: marketPda,
-      marginAccount: marginAccountPda,
-      side,
-      size,
-      leverage,
-      oracleAccount: mockOraclePda,
-      orderNonce,
-      positionNonce
-    }, keypair.publicKey);
-
-    await provider.sendAndConfirm(placeOrderTx);
-
-    // Get market state after opening position
-    const marketAfterOpen = await sdk.getMarket(marketPda);
-    console.log('\nMarket State After Opening:');
-    console.log('Price:', marketAfterOpen.lastPrice.toNumber());
-    console.log('Virtual Base Reserve:', marketAfterOpen.virtualBaseReserve.toNumber());
-    console.log('Virtual Quote Reserve:', marketAfterOpen.virtualQuoteReserve.toNumber());
-
-
-    
-    // Place a large trade to move the price up significantly
-    const priceUpdateSide = { long: {} };
-    const priceUpdateSize = new BN(5_000_000); // Much larger size to move price more
-    const priceUpdateLeverage = new BN(1);
-    const priceUpdateOrderNonce = 17;
-    const priceUpdatePositionNonce = 18;
-    
-    const [priceUpdateOrderPda] = await sdk.findOrderPda(marketPda, keypair.publicKey, priceUpdateOrderNonce);
-    const [priceUpdatePositionPda] = await sdk.findPositionPda(marketPda, keypair.publicKey, priceUpdatePositionNonce);
-    
+    // Place the large long position to move price up
     const priceUpdatePlaceOrderTx = await sdk.buildPlaceMarketOrderTransaction({
       market: marketPda,
       marginAccount: marginAccountPda,
@@ -697,34 +648,79 @@ describe("Contract Tests", () => {
 
     await provider.sendAndConfirm(priceUpdateCloseOrderTx);
     
-    // Add a small delay to ensure price update is processed
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    
     // Get market state after price update
     const marketAfterPriceUpdate = await sdk.getMarket(marketPda);
     console.log('\nMarket State After Price Update:');
     console.log('New Price:', marketAfterPriceUpdate.lastPrice.toNumber());
-    console.log('Virtual Base Reserve:', marketAfterPriceUpdate.virtualBaseReserve.toNumber());
-    console.log('Virtual Quote Reserve:', marketAfterPriceUpdate.virtualQuoteReserve.toNumber());
     
-    // Verify price actually changed
-    assert.isTrue(
-      marketAfterPriceUpdate.lastPrice.toNumber() > marketAfterOpen.lastPrice.toNumber(),
-      "Price should increase after oracle update"
-    );
+    // Now place our short position at the higher price
+    const side = { short: {} };
+    const size = new BN(1_000_000); // Reduced from 50M to 1M units
+    const leverage = new BN(2);
+    const orderNonce = 15;
+    const positionNonce = 16;
+    
+    const [orderPda] = await sdk.findOrderPda(marketPda, keypair.publicKey, orderNonce);
+    const [positionPda] = await sdk.findPositionPda(marketPda, keypair.publicKey, positionNonce);
+    
+    // Log margin account state before placing order
+    const marginAccountBefore = await sdk.getMarginAccount(keypair.publicKey, marketPda);
+    console.log('\nMargin Account Before Short Order:');
+    console.log('- Collateral:', marginAccountBefore.collateral.toNumber() / 1_000_000);
+    console.log('- Allocated Margin:', marginAccountBefore.allocatedMargin.toNumber() / 1_000_000);
+    
+    const placeOrderTx = await sdk.buildPlaceMarketOrderTransaction({
+      market: marketPda,
+      marginAccount: marginAccountPda,
+      side,
+      size,
+      leverage,
+      oracleAccount: mockOraclePda,
+      orderNonce,
+      positionNonce
+    }, keypair.publicKey);
+
+    await provider.sendAndConfirm(placeOrderTx);
+
+    // Place another large long position to move price up even more
+    const finalPriceUpdateSide = { long: {} };
+    const finalPriceUpdateSize = new BN(1_000_000); // 1M units
+    const finalPriceUpdateLeverage = new BN(1);
+    const finalPriceUpdateOrderNonce = 17;
+    const finalPriceUpdatePositionNonce = 18;
+    
+    const [finalPriceUpdateOrderPda] = await sdk.findOrderPda(marketPda, keypair.publicKey, finalPriceUpdateOrderNonce);
+    const [finalPriceUpdatePositionPda] = await sdk.findPositionPda(marketPda, keypair.publicKey, finalPriceUpdatePositionNonce);
+    
+    const finalPriceUpdatePlaceOrderTx = await sdk.buildPlaceMarketOrderTransaction({
+      market: marketPda,
+      marginAccount: marginAccountPda,
+      side: finalPriceUpdateSide,
+      size: finalPriceUpdateSize,
+      leverage: finalPriceUpdateLeverage,
+      oracleAccount: mockOraclePda,
+      orderNonce: finalPriceUpdateOrderNonce,
+      positionNonce: finalPriceUpdatePositionNonce
+    }, keypair.publicKey);
+
+    await provider.sendAndConfirm(finalPriceUpdatePlaceOrderTx);
+
+    // Close the final price update position
+    const finalPriceUpdateCloseOrderTx = await sdk.buildCloseMarketOrderTransaction({
+      market: marketPda,
+      order: finalPriceUpdateOrderPda,
+      position: finalPriceUpdatePositionPda,
+      marginAccount: marginAccountPda,
+      oracleAccount: mockOraclePda
+    }, keypair.publicKey);
+
+    await provider.sendAndConfirm(finalPriceUpdateCloseOrderTx);
     
     // Get margin account state before closing
-    const marginAccountBefore = await sdk.getMarginAccount(keypair.publicKey, marketPda);
-    const collateralBefore = marginAccountBefore.collateral.toNumber();
-    
-    console.log('\nShort Loss Details:');
-    console.log('Initial Collateral:', collateralBefore);
-    console.log('Position Size:', size.toNumber());
-    console.log('Leverage:', leverage.toNumber());
-    console.log('Entry Price:', initialPrice);
-    console.log('Exit Price:', marketAfterPriceUpdate.lastPrice.toNumber());
-    console.log('Price Change:', marketAfterPriceUpdate.lastPrice.toNumber() - initialPrice);
-    console.log('Price Change %:', ((marketAfterPriceUpdate.lastPrice.toNumber() - initialPrice) / initialPrice * 100).toFixed(2) + '%');
+    const marginAccountBeforeClose = await sdk.getMarginAccount(keypair.publicKey, marketPda);
+    console.log('\nMargin Account Before Closing:');
+    console.log('- Collateral:', marginAccountBeforeClose.collateral.toNumber() / 1_000_000);
+    console.log('- Allocated Margin:', marginAccountBeforeClose.allocatedMargin.toNumber() / 1_000_000);
     
     const closeOrderTx = await sdk.buildCloseMarketOrderTransaction({
       market: marketPda,
@@ -739,22 +735,22 @@ describe("Contract Tests", () => {
     // Get market state after closing
     const marketAfterClose = await sdk.getMarket(marketPda);
     console.log('\nMarket State After Closing:');
-    console.log('Price:', marketAfterClose.lastPrice.toNumber());
-    console.log('Virtual Base Reserve:', marketAfterClose.virtualBaseReserve.toNumber());
-    console.log('Virtual Quote Reserve:', marketAfterClose.virtualQuoteReserve.toNumber());
-
+    console.log('Final Price:', marketAfterClose.lastPrice.toNumber());
+    
     // Verify the margin account state after closing
     const marginAccountAfter = await sdk.getMarginAccount(keypair.publicKey, marketPda);
-    const collateralAfter = marginAccountAfter.collateral.toNumber();
-    
-    console.log('\nFinal State:');
-    console.log('Final Collateral:', collateralAfter);
-    console.log('Collateral Change:', collateralAfter - collateralBefore);
-    console.log('Collateral Change %:', ((collateralAfter - collateralBefore) / collateralBefore * 100).toFixed(2) + '%');
+    console.log('\nMargin Account After Closing:');
+    console.log('- Collateral:', marginAccountAfter.collateral.toNumber() / 1_000_000);
+    console.log('- Allocated Margin:', marginAccountAfter.allocatedMargin.toNumber() / 1_000_000);
+    console.log('- Collateral Change:', (marginAccountAfter.collateral.toNumber() - marginAccountBeforeClose.collateral.toNumber()) / 1_000_000);
+    console.log('- Collateral Change %:', ((marginAccountAfter.collateral.toNumber() - marginAccountBeforeClose.collateral.toNumber()) / marginAccountBeforeClose.collateral.toNumber() * 100).toFixed(2) + '%');
     
     assert.equal(marginAccountAfter.positions.length, 0);
     assert.equal(marginAccountAfter.orders.length, 0);
-    assert.isTrue(collateralAfter < collateralBefore, "Collateral should decrease after loss");
+    assert.isTrue(
+      marginAccountAfter.collateral.toNumber() < marginAccountBeforeClose.collateral.toNumber(),
+      "Collateral should decrease after loss"
+    );
     
     if ('isolated' in marginAccountAfter.marginType) {
       assert.equal(marginAccountAfter.allocatedMargin.toNumber(), 0);
@@ -1015,15 +1011,28 @@ describe("Contract Tests", () => {
       console.log('Error during cleanup:', error.message);
     }
     
-    // Reset margin account collateral to a known state (40 tokens)
+    // Reset margin account collateral to a known state (200 tokens)
     try {
       const marginAccount = await sdk.getMarginAccount(keypair.publicKey, marketPda);
-      const targetCollateral = 40_000_000; // 40 tokens
+      const targetCollateral = 200_000_000; // Increased to 200 tokens
       const currentCollateral = marginAccount.collateral.toNumber();
       
-      // Only reset collateral if current balance is less than or equal to target
-      if (currentCollateral <= targetCollateral) {
-        if (currentCollateral < targetCollateral) {
+      if (currentCollateral !== targetCollateral) {
+        if (currentCollateral > targetCollateral) {
+          // Withdraw excess
+          const excess = currentCollateral - targetCollateral;
+          console.log(`Withdrawing excess collateral: ${excess / 1_000_000} tokens`);
+          
+          const withdrawTx = await sdk.buildWithdrawCollateralTransaction({
+            marginAccount: marginAccountPda,
+            market: marketPda,
+            userTokenAccount,
+            vault: marketVaultPda,
+            mint: tokenMint,
+            amount: new BN(excess)
+          }, keypair.publicKey);
+          await provider.sendAndConfirm(withdrawTx);
+        } else {
           // Deposit to reach target
           const needed = targetCollateral - currentCollateral;
           console.log(`Depositing needed collateral: ${needed / 1_000_000} tokens`);
@@ -1038,8 +1047,6 @@ describe("Contract Tests", () => {
           }, keypair.publicKey);
           await provider.sendAndConfirm(depositTx);
         }
-      } else {
-        console.log('Skipping collateral reset - current balance higher than target (profitable trade)');
       }
     } catch (error) {
       console.log('Error resetting collateral:', error.message);

@@ -5,6 +5,9 @@ use crate::{
 };
 use anchor_lang::prelude::*;
 
+// Constants
+const PRICE_SCALE: u64 = 1_000_000; // 1.0 in price units
+
 #[derive(Accounts)]
 #[instruction(side: Side, size: u64, leverage: u64, order_bump: u8, position_bump: u8, order_nonce: u8, position_nonce: u8)]
 pub struct PlaceMarketOrder<'info> {
@@ -77,16 +80,7 @@ pub fn place_market_order(
     msg!("Initial base reserve: {}", initial_base_reserve);
     msg!("Initial quote reserve: {}", initial_quote_reserve);
 
-    // Update reserves using the Market's update_reserves method
-    msg!("Initial Base Reserve: {}", market.virtual_base_reserve);
-    msg!("Initial Quote Reserve: {}", market.virtual_quote_reserve);
-    msg!("Trade Size: {}", size);
-    msg!("Is Closing: {}", false);
-
-    // Update reserves using the Market's update_reserves method
-    market.update_reserves(&side, size)?;
-
-    // Calculate price with impact
+    // Calculate price with impact using initial reserves
     let price_with_impact = market.calculate_price_with_impact(
         size,
         false // Opening position
@@ -119,6 +113,7 @@ pub fn place_market_order(
             msg!("Total collateral: {}", margin_account.collateral);
             msg!("Allocated margin: {}", margin_account.allocated_margin);
             msg!("Available margin: {}", available_margin);
+            msg!("Required margin for order: {}", required_margin);
             require!(
                 available_margin >= required_margin,
                 ErrorCode::InsufficientMargin
@@ -128,11 +123,12 @@ pub fn place_market_order(
                 .allocated_margin
                 .checked_add(required_margin)
                 .ok_or(ErrorCode::MathOverflow)?;
-            msg!("New allocated margin: {}", margin_account.allocated_margin);
+            msg!("New allocated margin after order: {}", margin_account.allocated_margin);
         }
         MarginType::Cross => {
             msg!("Cross margin account:");
             msg!("Total collateral: {}", margin_account.collateral);
+            msg!("Required margin for order: {}", required_margin);
             require!(
                 margin_account.collateral >= required_margin,
                 ErrorCode::InsufficientMargin
@@ -177,6 +173,9 @@ pub fn place_market_order(
     // Add order and position to margin account
     margin_account.orders.push(order.key());
     margin_account.positions.push(position.key());
+
+    // Update reserves only after all validations and account updates are complete
+    market.update_reserves(size, matches!(side, Side::Long))?;
 
     // Emit events
     emit!(OrderPlacedEvent {
@@ -254,14 +253,6 @@ pub fn close_market_order(ctx: Context<CloseMarketOrder>) -> Result<()> {
     msg!("Initial base reserve: {}", initial_base_reserve);
     msg!("Initial quote reserve: {}", initial_quote_reserve);
 
-    // Update reserves using the Market's update_reserves method
-    // For closing, we need to use the opposite side
-    let opposite_side = match position.side {
-        Side::Long => Side::Short,
-        Side::Short => Side::Long,
-    };
-    market.update_reserves(&opposite_side, position.size)?;
-
     // Calculate exit price with impact
     let exit_price = market.calculate_price_with_impact(
         position.size,
@@ -269,141 +260,147 @@ pub fn close_market_order(ctx: Context<CloseMarketOrder>) -> Result<()> {
     )?;
     msg!("Exit price: {}", exit_price);
 
-    // Calculate PnL using oracle price
-    msg!("Starting PnL calculation...");
-    msg!("Position side: {:?}", position.side);
-    msg!("Entry price: {}", position.entry_price);
-    msg!("Exit price: {}", exit_price);
-    
-    // Convert to i64 for price difference calculation to handle negative values
-    let entry_price_i64 = position.entry_price as i64;
-    let exit_price_i64 = exit_price as i64;
-    
-    let price_diff = match position.side {
+    // Calculate PnL
+    let pnl = match position.side {
         Side::Long => {
-            msg!("Long position - calculating price difference (exit - entry)");
-            exit_price_i64.checked_sub(entry_price_i64)
+            // For long positions:
+            // - Profit when exit_price > entry_price
+            // - Loss when exit_price < entry_price
+            let price_diff = exit_price as i64 - position.entry_price as i64;
+            msg!("Long position PnL calculation:");
+            msg!("Exit price: {}", exit_price);
+            msg!("Entry price: {}", position.entry_price);
+            msg!("Price difference: {}", price_diff);
+            msg!("Position size: {}", position.size);
+
+            if price_diff > 0 {
+                // Profit case
+                msg!("Long position profit calculation:");
+                price_diff.checked_div(PRICE_SCALE as i64)
+                    .ok_or(ErrorCode::MathOverflow)?
+                    .checked_mul(position.size as i64)
+                    .ok_or_else(|| {
+                        msg!("ERROR: Math overflow in profit calculation");
+                        ErrorCode::MathOverflow
+                    })?
+            } else {
+                // Loss case
+                msg!("Long position loss calculation:");
+                let loss = (-price_diff).checked_div(PRICE_SCALE as i64)
+                    .ok_or(ErrorCode::MathOverflow)?
+                    .checked_mul(position.size as i64)
+                    .ok_or_else(|| {
+                        msg!("ERROR: Math overflow in loss calculation");
+                        ErrorCode::MathOverflow
+                    })?;
+                -loss // Return negative value for loss
+            }
         },
         Side::Short => {
-            msg!("Short position - calculating price difference (entry - exit)");
-            entry_price_i64.checked_sub(exit_price_i64)
-        },
-    }.ok_or_else(|| {
-        msg!("Overflow in price difference calculation");
-        ErrorCode::MathOverflow
-    })?;
-    msg!("Price difference calculated: {}", price_diff);
+            // For short positions:
+            // - Profit when entry_price > exit_price
+            // - Loss when entry_price < exit_price
+            let price_diff = position.entry_price as i64 - exit_price as i64;
+            msg!("Short position PnL calculation:");
+            msg!("Entry price: {}", position.entry_price);
+            msg!("Exit price: {}", exit_price);
+            msg!("Price difference: {}", price_diff);
+            msg!("Position size: {}", position.size);
 
-    // Convert price_diff back to u64 for further calculations
-    let price_diff_abs = price_diff.checked_abs().ok_or_else(|| {
-        msg!("Overflow in price_diff.checked_abs()");
-        ErrorCode::MathOverflow
-    })? as u64;
-
-    // Calculate price change percentage (in basis points)
-    msg!("Calculating price change percentage...");
-    let price_change_bps = price_diff_abs
-        .checked_mul(10_000)
-        .ok_or_else(|| {
-            msg!("Overflow in price_diff_abs * 10_000");
-            ErrorCode::MathOverflow
-        })?
-        .checked_div(position.entry_price)
-        .ok_or_else(|| {
-            msg!("Overflow in price_diff_abs * 10_000 / entry_price");
-            ErrorCode::MathOverflow
-        })?;
-    msg!("Price change percentage (bps): {}", price_change_bps);
-
-    // Calculate position value at entry
-    msg!("Calculating position value at entry...");
-    let entry_value = position.size
-        .checked_mul(position.entry_price)
-        .ok_or_else(|| {
-            msg!("Overflow in size * entry_price");
-            ErrorCode::MathOverflow
-        })?
-        .checked_div(1_000_000)
-        .ok_or_else(|| {
-            msg!("Overflow in (size * entry_price) / 1_000_000");
-            ErrorCode::MathOverflow
-        })?;
-    msg!("Position value at entry: {}", entry_value);
-
-    // Calculate PnL based on percentage change
-    msg!("Calculating final PnL...");
-    let pnl = entry_value
-        .checked_mul(price_change_bps)
-        .ok_or_else(|| {
-            msg!("Overflow in entry_value * price_change_bps");
-            ErrorCode::MathOverflow
-        })?
-        .checked_div(10_000)
-        .ok_or_else(|| {
-            msg!("Overflow in (entry_value * price_change_bps) / 10_000");
-            ErrorCode::MathOverflow
-        })? as i64;
-
-    // Apply the correct sign to PnL based on position side and price movement
-    let pnl = if (position.side == Side::Long && price_diff < 0) || 
-               (position.side == Side::Short && price_diff > 0) {
-        -pnl
-    } else {
-        pnl
+            if price_diff > 0 {
+                // Profit case
+                msg!("Short position profit calculation:");
+                price_diff.checked_div(PRICE_SCALE as i64)
+                    .ok_or(ErrorCode::MathOverflow)?
+                    .checked_mul(position.size as i64)
+                    .ok_or_else(|| {
+                        msg!("ERROR: Math overflow in profit calculation");
+                        ErrorCode::MathOverflow
+                    })?
+            } else {
+                // Loss case
+                msg!("Short position loss calculation:");
+                let loss = (-price_diff).checked_div(PRICE_SCALE as i64)
+                    .ok_or(ErrorCode::MathOverflow)?
+                    .checked_mul(position.size as i64)
+                    .ok_or_else(|| {
+                        msg!("ERROR: Math overflow in loss calculation");
+                        ErrorCode::MathOverflow
+                    })?;
+                -loss // Return negative value for loss
+            }
+        }
     };
-    msg!("Final PnL calculated: {}", pnl);
-
-    msg!("PnL calculation complete");
-    msg!("Summary:");
-    msg!("- Position size: {}", position.size);
-    msg!("- Entry price: {}", position.entry_price);
-    msg!("- Exit price: {}", exit_price);
-    msg!("- Price difference: {}", price_diff);
-    msg!("- Price change %: {}", price_change_bps);
-    msg!("- Entry value: {}", entry_value);
-    msg!("- Final PnL: {}", pnl);
+    msg!("Final PnL: {}", pnl);
 
     // Update margin account
-    match margin_account.margin_type {
-        MarginType::Isolated => {
-            // For isolated margin, deallocate margin and update collateral
-            margin_account.allocated_margin = margin_account
-                .allocated_margin
-                .checked_sub(position.collateral)
-                .ok_or(ErrorCode::MathOverflow)?;
-            
-            // Add PnL to collateral
-            if pnl > 0 {
-                margin_account.collateral = margin_account
-                    .collateral
-                    .checked_add(pnl as u64)
-                    .ok_or(ErrorCode::MathOverflow)?;
-            } else {
-                margin_account.collateral = margin_account
-                    .collateral
-                    .checked_sub((-pnl) as u64)
-                    .ok_or(ErrorCode::MathOverflow)?;
-            }
+    msg!("\nMargin Account Update (Isolated):");
+    msg!("Previous allocated margin: {}", margin_account.allocated_margin);
+    msg!("Position collateral to deallocate: {}", position.collateral);
+    
+    // First return the position's collateral
+    margin_account.collateral = margin_account.collateral
+        .checked_add(position.collateral)
+        .ok_or_else(|| {
+            msg!("ERROR: Math overflow in collateral return");
+            ErrorCode::MathOverflow
+        })?;
+    msg!("Returned position collateral: {}", position.collateral);
+    
+    // Deallocate margin
+    margin_account.allocated_margin = margin_account.allocated_margin
+        .checked_sub(position.collateral)
+        .ok_or_else(|| {
+            msg!("ERROR: Math overflow in margin deallocation");
+            ErrorCode::MathOverflow
+        })?;
+    msg!("New allocated margin: {}", margin_account.allocated_margin);
+    
+    // Update collateral with PnL
+    msg!("Previous collateral: {}", margin_account.collateral);
+    
+    // No need to scale PnL again since we already scaled it in the calculation
+    let scaled_pnl = pnl;
+    msg!("Scaled PnL: {}", scaled_pnl);
+    
+    // Update collateral with PnL
+    if scaled_pnl > 0 {
+        // Profit: add to collateral
+        margin_account.collateral = margin_account.collateral
+            .checked_add(scaled_pnl as u64)
+            .ok_or_else(|| {
+                msg!("ERROR: Math overflow in collateral addition");
+                ErrorCode::MathOverflow
+            })?;
+        msg!("Added profit to collateral: {}", scaled_pnl);
+    } else if scaled_pnl < 0 {
+        // Loss: subtract from collateral
+        let loss = (-scaled_pnl) as u64;
+        if loss > margin_account.collateral {
+            msg!("ERROR: Loss {} exceeds available collateral {}", loss, margin_account.collateral);
+            return Err(ErrorCode::InsufficientCollateral.into());
         }
-        MarginType::Cross => {
-            // For cross margin, just update collateral with PnL
-            if pnl > 0 {
-                margin_account.collateral = margin_account
-                    .collateral
-                    .checked_add(pnl as u64)
-                    .ok_or(ErrorCode::MathOverflow)?;
-            } else {
-                margin_account.collateral = margin_account
-                    .collateral
-                    .checked_sub((-pnl) as u64)
-                    .ok_or(ErrorCode::MathOverflow)?;
-            }
-        }
+        margin_account.collateral = margin_account.collateral
+            .checked_sub(loss)
+            .ok_or_else(|| {
+                msg!("ERROR: Math overflow in collateral subtraction");
+                ErrorCode::MathOverflow
+            })?;
+        msg!("Subtracted loss from collateral: {}", loss);
     }
+    msg!("New collateral: {}", margin_account.collateral);
 
     // Update market state with new reserves
     market.last_price = exit_price;
     market.last_update_time = current_timestamp;
+
+    // Update reserves using the Market's update_reserves method
+    // For closing, we need to use the opposite side
+    let opposite_side = match position.side {
+        Side::Long => Side::Short,
+        Side::Short => Side::Long,
+    };
+    market.update_reserves(position.size, matches!(opposite_side, Side::Long))?;
 
     // Update position
     position.is_open = false;
