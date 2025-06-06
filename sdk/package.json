@@ -1,6 +1,6 @@
 {
   "name": "@swiv-sdk/perpetual-swap-sdk",
-  "version": "0.2.6",
+  "version": "0.2.7",
   "description": "SDK for Swiv Perpetual Swap Protocol",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -24,12 +24,12 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/swiv-sdk/perpetual-swap-sdk.git"
+    "url": "https://github.com/SwivTrade/contract-v1/tree/test/sdk"
   },
   "bugs": {
-    "url": "https://github.com/swiv-sdk/perpetual-swap-sdk/issues"
+    "url": "https://github.com/SwivTrade/contract-v1/issues"
   },
-  "homepage": "https://github.com/swiv-sdk/perpetual-swap-sdk#readme",
+  "homepage": "https://github.com/SwivTrade/contract-v1/tree/test/sdk",
   "publishConfig": {
     "access": "public"
   },

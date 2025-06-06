@@ -31,7 +31,7 @@ pub struct PlaceMarketOrder<'info> {
     pub position: Account<'info, Position>,
     #[account(
         mut,
-        constraint = margin_account.owner == trader.key() @ ErrorCode::Unauthorized,
+        //constraint = margin_account.owner == trader.key() @ ErrorCode::Unauthorized,
         constraint = margin_account.perp_market == market.key() @ ErrorCode::InvalidParameter,
     )]
     pub margin_account: Account<'info, MarginAccount>,
@@ -225,7 +225,7 @@ pub struct CloseMarketOrder<'info> {
     pub position: Account<'info, Position>,
     #[account(
         mut,
-        constraint = margin_account.owner == trader.key() @ ErrorCode::Unauthorized,
+        //constraint = margin_account.owner == trader.key() @ ErrorCode::Unauthorized,
         constraint = margin_account.perp_market == market.key() @ ErrorCode::InvalidParameter,
     )]
     pub margin_account: Account<'info, MarginAccount>,
