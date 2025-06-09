@@ -37,7 +37,7 @@ function findMarginAccountPda(programId, owner, market) {
  * @param programId The program ID
  * @param market The market's public key
  * @param owner The owner's public key
- * @param nonce The nonce to include in the PDA
+ * @param nonce The position nonce
  * @returns A tuple containing the position PDA and the bump seed
  */
 function findPositionPda(programId, market, owner, nonce) {

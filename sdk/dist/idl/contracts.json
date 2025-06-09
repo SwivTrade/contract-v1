@@ -1,5 +1,5 @@
 {
-    "address": "2nga8op3u3j7Df7wsQv2n5hkRqjEFLjkWGGAfn4aHsfy",
+    "address": "BSRWveJobC6xFCuo3wqwGGa4N1Kqcoc9r8H2AzCavvpg",
     "metadata": {
         "name": "contracts",
         "version": "0.1.0",
@@ -7,6 +7,54 @@
         "description": "Created with Anchor"
     },
     "instructions": [
+        {
+            "name": "close_market_order",
+            "discriminator": [
+                161,
+                211,
+                209,
+                73,
+                201,
+                237,
+                81,
+                146
+            ],
+            "accounts": [
+                {
+                    "name": "market",
+                    "writable": true,
+                    "relations": [
+                        "order",
+                        "position"
+                    ]
+                },
+                {
+                    "name": "order",
+                    "writable": true
+                },
+                {
+                    "name": "position",
+                    "writable": true
+                },
+                {
+                    "name": "margin_account",
+                    "writable": true
+                },
+                {
+                    "name": "trader",
+                    "writable": true,
+                    "signer": true,
+                    "relations": [
+                        "order",
+                        "position"
+                    ]
+                },
+                {
+                    "name": "price_update"
+                }
+            ],
+            "args": []
+        },
         {
             "name": "close_position",
             "discriminator": [
@@ -284,6 +332,18 @@
                     "type": "u64"
                 },
                 {
+                    "name": "virtual_base_reserve",
+                    "type": "u64"
+                },
+                {
+                    "name": "virtual_quote_reserve",
+                    "type": "u64"
+                },
+                {
+                    "name": "price_impact_factor",
+                    "type": "u64"
+                },
+                {
                     "name": "bump",
                     "type": "u8"
                 }
@@ -308,32 +368,7 @@
                 },
                 {
                     "name": "position",
-                    "writable": true,
-                    "pda": {
-                        "seeds": [
-                            {
-                                "kind": "const",
-                                "value": [
-                                    112,
-                                    111,
-                                    115,
-                                    105,
-                                    116,
-                                    105,
-                                    111,
-                                    110
-                                ]
-                            },
-                            {
-                                "kind": "account",
-                                "path": "market"
-                            },
-                            {
-                                "kind": "account",
-                                "path": "trader"
-                            }
-                        ]
-                    }
+                    "writable": true
                 },
                 {
                     "name": "margin_account",
@@ -372,8 +407,143 @@
                 {
                     "name": "bump",
                     "type": "u8"
+                },
+                {
+                    "name": "nonce",
+                    "type": "u8"
                 }
             ]
+        },
+        {
+            "name": "pause_market",
+            "discriminator": [
+                216,
+                238,
+                4,
+                164,
+                65,
+                11,
+                162,
+                91
+            ],
+            "accounts": [
+                {
+                    "name": "market",
+                    "writable": true
+                },
+                {
+                    "name": "authority",
+                    "signer": true,
+                    "relations": [
+                        "market"
+                    ]
+                }
+            ],
+            "args": []
+        },
+        {
+            "name": "place_market_order",
+            "discriminator": [
+                90,
+                118,
+                192,
+                252,
+                192,
+                99,
+                39,
+                145
+            ],
+            "accounts": [
+                {
+                    "name": "market",
+                    "writable": true
+                },
+                {
+                    "name": "order",
+                    "writable": true
+                },
+                {
+                    "name": "position",
+                    "writable": true
+                },
+                {
+                    "name": "margin_account",
+                    "writable": true
+                },
+                {
+                    "name": "trader",
+                    "writable": true,
+                    "signer": true
+                },
+                {
+                    "name": "price_update"
+                },
+                {
+                    "name": "system_program",
+                    "address": "11111111111111111111111111111111"
+                }
+            ],
+            "args": [
+                {
+                    "name": "side",
+                    "type": {
+                        "defined": {
+                            "name": "Side"
+                        }
+                    }
+                },
+                {
+                    "name": "size",
+                    "type": "u64"
+                },
+                {
+                    "name": "leverage",
+                    "type": "u64"
+                },
+                {
+                    "name": "order_bump",
+                    "type": "u8"
+                },
+                {
+                    "name": "position_bump",
+                    "type": "u8"
+                },
+                {
+                    "name": "order_nonce",
+                    "type": "u8"
+                },
+                {
+                    "name": "position_nonce",
+                    "type": "u8"
+                }
+            ]
+        },
+        {
+            "name": "resume_market",
+            "discriminator": [
+                198,
+                120,
+                104,
+                87,
+                44,
+                103,
+                108,
+                143
+            ],
+            "accounts": [
+                {
+                    "name": "market",
+                    "writable": true
+                },
+                {
+                    "name": "authority",
+                    "signer": true,
+                    "relations": [
+                        "market"
+                    ]
+                }
+            ],
+            "args": []
         },
         {
             "name": "update_funding_payments",
@@ -505,6 +675,19 @@
                 227,
                 198,
                 154
+            ]
+        },
+        {
+            "name": "Order",
+            "discriminator": [
+                134,
+                173,
+                223,
+                185,
+                77,
+                86,
+                28,
+                51
             ]
         },
         {
@@ -906,6 +1089,11 @@
             "code": 6034,
             "name": "InvalidVault",
             "msg": "Invalid vault provided"
+        },
+        {
+            "code": 6035,
+            "name": "InvalidAMMState",
+            "msg": "Invalid AMM state - virtual reserves cannot be zero"
         }
     ],
     "types": [
@@ -1195,6 +1383,26 @@
                     {
                         "name": "bump",
                         "type": "u8"
+                    },
+                    {
+                        "name": "virtual_base_reserve",
+                        "type": "u64"
+                    },
+                    {
+                        "name": "virtual_quote_reserve",
+                        "type": "u64"
+                    },
+                    {
+                        "name": "price_impact_factor",
+                        "type": "u64"
+                    },
+                    {
+                        "name": "last_price",
+                        "type": "u64"
+                    },
+                    {
+                        "name": "last_update_time",
+                        "type": "i64"
                     }
                 ]
             }
@@ -1234,6 +1442,22 @@
                     },
                     {
                         "name": "max_leverage",
+                        "type": "u64"
+                    },
+                    {
+                        "name": "virtual_base_reserve",
+                        "type": "u64"
+                    },
+                    {
+                        "name": "virtual_quote_reserve",
+                        "type": "u64"
+                    },
+                    {
+                        "name": "price_impact_factor",
+                        "type": "u64"
+                    },
+                    {
+                        "name": "initial_price",
                         "type": "u64"
                     }
                 ]
@@ -1304,6 +1528,70 @@
             }
         },
         {
+            "name": "Order",
+            "type": {
+                "kind": "struct",
+                "fields": [
+                    {
+                        "name": "trader",
+                        "type": "pubkey"
+                    },
+                    {
+                        "name": "market",
+                        "type": "pubkey"
+                    },
+                    {
+                        "name": "side",
+                        "type": {
+                            "defined": {
+                                "name": "Side"
+                            }
+                        }
+                    },
+                    {
+                        "name": "order_type",
+                        "type": {
+                            "defined": {
+                                "name": "OrderType"
+                            }
+                        }
+                    },
+                    {
+                        "name": "price",
+                        "type": "u64"
+                    },
+                    {
+                        "name": "size",
+                        "type": "u64"
+                    },
+                    {
+                        "name": "filled_size",
+                        "type": "u64"
+                    },
+                    {
+                        "name": "leverage",
+                        "type": "u64"
+                    },
+                    {
+                        "name": "collateral",
+                        "type": "u64"
+                    },
+                    {
+                        "name": "created_at",
+                        "type": "i64"
+                    },
+                    {
+                        "name": "is_active",
+                        "type": "bool"
+                    },
+                    {
+                        "name": "bump",
+                        "type": "u8"
+                    }
+                ]
+            }
+        },
+        {
             "name": "OrderCancelledEvent",
             "type": {
                 "kind": "struct",
@@ -1359,6 +1647,10 @@
                     {
                         "name": "filled_size",
                         "type": "u64"
+                    },
+                    {
+                        "name": "timestamp",
+                        "type": "i64"
                     }
                 ]
             }
@@ -1407,6 +1699,10 @@
                     {
                         "name": "leverage",
                         "type": "u64"
+                    },
+                    {
+                        "name": "timestamp",
+                        "type": "i64"
                     }
                 ]
             }

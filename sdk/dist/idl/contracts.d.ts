@@ -5,7 +5,7 @@
  * IDL can be found at `target/idl/contracts.json`.
  */
 export type Contracts = {
-    "address": "2nga8op3u3j7Df7wsQv2n5hkRqjEFLjkWGGAfn4aHsfy";
+    "address": "BSRWveJobC6xFCuo3wqwGGa4N1Kqcoc9r8H2AzCavvpg";
     "metadata": {
         "name": "contracts";
         "version": "0.1.0";
@@ -13,6 +13,54 @@ export type Contracts = {
         "description": "Created with Anchor";
     };
     "instructions": [
+        {
+            "name": "closeMarketOrder";
+            "discriminator": [
+                161,
+                211,
+                209,
+                73,
+                201,
+                237,
+                81,
+                146
+            ];
+            "accounts": [
+                {
+                    "name": "market";
+                    "writable": true;
+                    "relations": [
+                        "order",
+                        "position"
+                    ];
+                },
+                {
+                    "name": "order";
+                    "writable": true;
+                },
+                {
+                    "name": "position";
+                    "writable": true;
+                },
+                {
+                    "name": "marginAccount";
+                    "writable": true;
+                },
+                {
+                    "name": "trader";
+                    "writable": true;
+                    "signer": true;
+                    "relations": [
+                        "order",
+                        "position"
+                    ];
+                },
+                {
+                    "name": "priceUpdate";
+                }
+            ];
+            "args": [];
+        },
         {
             "name": "closePosition";
             "discriminator": [
@@ -290,6 +338,18 @@ export type Contracts = {
                     "type": "u64";
                 },
                 {
+                    "name": "virtualBaseReserve";
+                    "type": "u64";
+                },
+                {
+                    "name": "virtualQuoteReserve";
+                    "type": "u64";
+                },
+                {
+                    "name": "priceImpactFactor";
+                    "type": "u64";
+                },
+                {
                     "name": "bump";
                     "type": "u8";
                 }
@@ -315,31 +375,6 @@ export type Contracts = {
                 {
                     "name": "position";
                     "writable": true;
-                    "pda": {
-                        "seeds": [
-                            {
-                                "kind": "const";
-                                "value": [
-                                    112,
-                                    111,
-                                    115,
-                                    105,
-                                    116,
-                                    105,
-                                    111,
-                                    110
-                                ];
-                            },
-                            {
-                                "kind": "account";
-                                "path": "market";
-                            },
-                            {
-                                "kind": "account";
-                                "path": "trader";
-                            }
-                        ];
-                    };
                 },
                 {
                     "name": "marginAccount";
@@ -378,8 +413,143 @@ export type Contracts = {
                 {
                     "name": "bump";
                     "type": "u8";
+                },
+                {
+                    "name": "nonce";
+                    "type": "u8";
                 }
             ];
+        },
+        {
+            "name": "pauseMarket";
+            "discriminator": [
+                216,
+                238,
+                4,
+                164,
+                65,
+                11,
+                162,
+                91
+            ];
+            "accounts": [
+                {
+                    "name": "market";
+                    "writable": true;
+                },
+                {
+                    "name": "authority";
+                    "signer": true;
+                    "relations": [
+                        "market"
+                    ];
+                }
+            ];
+            "args": [];
+        },
+        {
+            "name": "placeMarketOrder";
+            "discriminator": [
+                90,
+                118,
+                192,
+                252,
+                192,
+                99,
+                39,
+                145
+            ];
+            "accounts": [
+                {
+                    "name": "market";
+                    "writable": true;
+                },
+                {
+                    "name": "order";
+                    "writable": true;
+                },
+                {
+                    "name": "position";
+                    "writable": true;
+                },
+                {
+                    "name": "marginAccount";
+                    "writable": true;
+                },
+                {
+                    "name": "trader";
+                    "writable": true;
+                    "signer": true;
+                },
+                {
+                    "name": "priceUpdate";
+                },
+                {
+                    "name": "systemProgram";
+                    "address": "11111111111111111111111111111111";
+                }
+            ];
+            "args": [
+                {
+                    "name": "side";
+                    "type": {
+                        "defined": {
+                            "name": "side";
+                        };
+                    };
+                },
+                {
+                    "name": "size";
+                    "type": "u64";
+                },
+                {
+                    "name": "leverage";
+                    "type": "u64";
+                },
+                {
+                    "name": "orderBump";
+                    "type": "u8";
+                },
+                {
+                    "name": "positionBump";
+                    "type": "u8";
+                },
+                {
+                    "name": "orderNonce";
+                    "type": "u8";
+                },
+                {
+                    "name": "positionNonce";
+                    "type": "u8";
+                }
+            ];
+        },
+        {
+            "name": "resumeMarket";
+            "discriminator": [
+                198,
+                120,
+                104,
+                87,
+                44,
+                103,
+                108,
+                143
+            ];
+            "accounts": [
+                {
+                    "name": "market";
+                    "writable": true;
+                },
+                {
+                    "name": "authority";
+                    "signer": true;
+                    "relations": [
+                        "market"
+                    ];
+                }
+            ];
+            "args": [];
         },
         {
             "name": "updateFundingPayments";
@@ -511,6 +681,19 @@ export type Contracts = {
                 227,
                 198,
                 154
+            ];
+        },
+        {
+            "name": "order";
+            "discriminator": [
+                134,
+                173,
+                223,
+                185,
+                77,
+                86,
+                28,
+                51
             ];
         },
         {
@@ -912,6 +1095,11 @@ export type Contracts = {
             "code": 6034;
             "name": "invalidVault";
             "msg": "Invalid vault provided";
+        },
+        {
+            "code": 6035;
+            "name": "invalidAmmState";
+            "msg": "Invalid AMM state - virtual reserves cannot be zero";
         }
     ];
     "types": [
@@ -1201,6 +1389,26 @@ export type Contracts = {
                     {
                         "name": "bump";
                         "type": "u8";
+                    },
+                    {
+                        "name": "virtualBaseReserve";
+                        "type": "u64";
+                    },
+                    {
+                        "name": "virtualQuoteReserve";
+                        "type": "u64";
+                    },
+                    {
+                        "name": "priceImpactFactor";
+                        "type": "u64";
+                    },
+                    {
+                        "name": "lastPrice";
+                        "type": "u64";
+                    },
+                    {
+                        "name": "lastUpdateTime";
+                        "type": "i64";
                     }
                 ];
             };
@@ -1240,6 +1448,22 @@ export type Contracts = {
                     },
                     {
                         "name": "maxLeverage";
+                        "type": "u64";
+                    },
+                    {
+                        "name": "virtualBaseReserve";
+                        "type": "u64";
+                    },
+                    {
+                        "name": "virtualQuoteReserve";
+                        "type": "u64";
+                    },
+                    {
+                        "name": "priceImpactFactor";
+                        "type": "u64";
+                    },
+                    {
+                        "name": "initialPrice";
                         "type": "u64";
                     }
                 ];
@@ -1310,6 +1534,70 @@ export type Contracts = {
             };
         },
         {
+            "name": "order";
+            "type": {
+                "kind": "struct";
+                "fields": [
+                    {
+                        "name": "trader";
+                        "type": "pubkey";
+                    },
+                    {
+                        "name": "market";
+                        "type": "pubkey";
+                    },
+                    {
+                        "name": "side";
+                        "type": {
+                            "defined": {
+                                "name": "side";
+                            };
+                        };
+                    },
+                    {
+                        "name": "orderType";
+                        "type": {
+                            "defined": {
+                                "name": "orderType";
+                            };
+                        };
+                    },
+                    {
+                        "name": "price";
+                        "type": "u64";
+                    },
+                    {
+                        "name": "size";
+                        "type": "u64";
+                    },
+                    {
+                        "name": "filledSize";
+                        "type": "u64";
+                    },
+                    {
+                        "name": "leverage";
+                        "type": "u64";
+                    },
+                    {
+                        "name": "collateral";
+                        "type": "u64";
+                    },
+                    {
+                        "name": "createdAt";
+                        "type": "i64";
+                    },
+                    {
+                        "name": "isActive";
+                        "type": "bool";
+                    },
+                    {
+                        "name": "bump";
+                        "type": "u8";
+                    }
+                ];
+            };
+        },
+        {
             "name": "orderCancelledEvent";
             "type": {
                 "kind": "struct";
@@ -1365,6 +1653,10 @@ export type Contracts = {
                     {
                         "name": "filledSize";
                         "type": "u64";
+                    },
+                    {
+                        "name": "timestamp";
+                        "type": "i64";
                     }
                 ];
             };
@@ -1413,6 +1705,10 @@ export type Contracts = {
                     {
                         "name": "leverage";
                         "type": "u64";
+                    },
+                    {
+                        "name": "timestamp";
+                        "type": "i64";
                     }
                 ];
             };

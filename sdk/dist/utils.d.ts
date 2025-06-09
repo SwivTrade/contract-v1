@@ -20,9 +20,10 @@ export declare function findMarginAccountPda(programId: PublicKey, owner: Public
  * @param programId The program ID
  * @param market The market's public key
  * @param owner The owner's public key
+ * @param nonce The position nonce
  * @returns A tuple containing the position PDA and the bump seed
  */
-export declare function findPositionPda(programId: PublicKey, market: PublicKey, owner: PublicKey): [PublicKey, number];
+export declare function findPositionPda(programId: PublicKey, market: PublicKey, owner: PublicKey, nonce: number): [PublicKey, number];
 /**
  * Convert a number to a BN (Big Number)
  * @param value The number to convert
