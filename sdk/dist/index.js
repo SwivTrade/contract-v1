@@ -40,6 +40,7 @@ class PerpetualSwapSDK {
      * @param adminKeypair - Optional admin keypair for admin operations
      */
     constructor(connection, wallet, adminKeypair) {
+        this.connection = connection;
         // If wallet is provided, we're in admin mode
         if (wallet) {
             this.provider = new anchor_1.AnchorProvider(connection, wallet, {
@@ -93,7 +94,7 @@ class PerpetualSwapSDK {
         const [marketPda, marketBump] = (0, utils_1.findMarketPda)(this.program.programId, params.marketSymbol);
         const [marketVaultPda, marketVaultBump] = (0, utils_1.findMarketVaultPda)(this.program.programId, marketPda);
         await this.program.methods
-            .initializeMarket(params.marketSymbol, new anchor_1.BN(params.initialFundingRate), new anchor_1.BN(params.fundingInterval), new anchor_1.BN(params.maintenanceMarginRatio), new anchor_1.BN(params.initialMarginRatio), new anchor_1.BN(params.maxLeverage), marketBump)
+            .initializeMarket(params.marketSymbol, new anchor_1.BN(params.initialFundingRate), new anchor_1.BN(params.fundingInterval), new anchor_1.BN(params.maintenanceMarginRatio), new anchor_1.BN(params.initialMarginRatio), new anchor_1.BN(params.maxLeverage), new anchor_1.BN(params.liquidationFeeRatio), marketBump)
             .accountsStrict({
             market: marketPda,
             authority: this.provider.wallet.publicKey,
@@ -248,41 +249,51 @@ class PerpetualSwapSDK {
     /**
      * Build a transaction to open a position
      */
-    async buildOpenPositionTransaction(params, userPublicKey) {
-        const [positionPda, positionBump] = await this.findPositionPda(params.market, userPublicKey, params.nonce);
-        const instruction = await this.program.methods
-            .openPosition(params.side, params.size, params.leverage, positionBump)
-            .accountsStrict({
-            market: params.market,
-            position: positionPda,
-            marginAccount: params.marginAccount,
-            trader: userPublicKey,
-            priceUpdate: params.oracleAccount,
-            systemProgram: web3_js_1.SystemProgram.programId,
-        })
-            .instruction();
-        const transaction = new web3_js_1.Transaction();
-        transaction.add(instruction);
-        return transaction;
-    }
+    // async buildOpenPositionTransaction(
+    //   params: OpenPositionParams,
+    //   userPublicKey: PublicKey
+    // ): Promise<Transaction> {
+    //   const [positionPda, positionBump] = await this.findPositionPda(
+    //     params.market,
+    //     userPublicKey,
+    //     params.nonce
+    //   );
+    //   const instruction = await this.program.methods
+    //     .openPosition(params.side, params.size, params.leverage, positionBump, params.nonce)
+    //     .accountsStrict({
+    //       market: params.market,
+    //       position: positionPda,
+    //       marginAccount: params.marginAccount,
+    //       trader: userPublicKey,
+    //       priceUpdate: params.oracleAccount,
+    //       systemProgram: SystemProgram.programId,
+    //     })
+    //     .instruction();
+    //   const transaction = new Transaction();
+    //   transaction.add(instruction);
+    //   return transaction;
+    // }
     /**
      * Build a transaction to close a position
      */
-    async buildClosePositionTransaction(params, userPublicKey) {
-        const instruction = await this.program.methods
-            .closePosition()
-            .accountsStrict({
-            market: params.market,
-            position: params.position,
-            marginAccount: params.marginAccount,
-            trader: userPublicKey,
-            priceUpdate: params.oracleAccount,
-        })
-            .instruction();
-        const transaction = new web3_js_1.Transaction();
-        transaction.add(instruction);
-        return transaction;
-    }
+    // async buildClosePositionTransaction(
+    //   params: ClosePositionParams,
+    //   userPublicKey: PublicKey
+    // ): Promise<Transaction> {
+    //   const instruction = await this.program.methods
+    //     .closePosition()
+    //     .accountsStrict({
+    //       market: params.market,
+    //       position: params.position,
+    //       marginAccount: params.marginAccount,
+    //       trader: userPublicKey,
+    //       priceUpdate: params.oracleAccount,
+    //     })
+    //     .instruction();
+    //   const transaction = new Transaction();
+    //   transaction.add(instruction);
+    //   return transaction;
+    // }
     // ===== READ OPERATIONS =====
     /**
      * Get market details
@@ -325,8 +336,13 @@ class PerpetualSwapSDK {
     /**
      * Find the PDA for a position
      */
-    async findPositionPda(marketPda, owner, nonce) {
-        return (0, utils_1.findPositionPda)(this.program.programId, marketPda, owner, nonce);
+    async findPositionPda(market, trader, uid) {
+        return web3_js_1.PublicKey.findProgramAddress([
+            Buffer.from("position"),
+            market.toBuffer(),
+            trader.toBuffer(),
+            new anchor_1.BN(uid).toArrayLike(Buffer, "le", 8),
+        ], this.program.programId);
     }
     /**
      * Get all markets from the program
@@ -334,6 +350,94 @@ class PerpetualSwapSDK {
     async getAllMarkets() {
         const markets = await this.program.account.market.all();
         return markets.map(market => market.account);
+    }
+    async findOrderPda(market, trader, uid) {
+        return await web3_js_1.PublicKey.findProgramAddress([
+            Buffer.from("order"),
+            market.toBuffer(),
+            trader.toBuffer(),
+            new anchor_1.BN(uid).toArrayLike(Buffer, 'le', 8)
+        ], this.program.programId);
+    }
+    async getOrder(orderPda) {
+        return await this.program.account.order.fetch(orderPda);
+    }
+    /**
+     * Generate a unique ID for orders and positions
+     * Uses timestamp and random number to ensure uniqueness
+     */
+    generateUid() {
+        // Use a combination of timestamp and random number that stays within safe integer range
+        const timestamp = Math.floor(Date.now() / 1000); // Convert to seconds
+        const random = Math.floor(Math.random() * 10000); // 4 digits of randomness
+        return timestamp * 10000 + random; // This will stay within safe integer range
+    }
+    async buildPlaceMarketOrderTransaction(params, trader) {
+        const uid = this.generateUid();
+        const [orderPda] = await this.findOrderPda(params.market, trader, uid);
+        const [positionPda] = await this.findPositionPda(params.market, trader, uid);
+        const tx = await this.program.methods
+            .placeMarketOrder(params.side, params.size, params.leverage, 0, // order_bump will be calculated by Anchor
+        0, // position_bump will be calculated by Anchor
+        new anchor_1.BN(uid))
+            .accountsStrict({
+            market: params.market,
+            order: orderPda,
+            position: positionPda,
+            marginAccount: params.marginAccount,
+            trader,
+            priceUpdate: params.oracleAccount,
+            systemProgram: web3_js_1.SystemProgram.programId,
+        })
+            .transaction();
+        return tx;
+    }
+    async buildPauseMarketTransaction(params, authority) {
+        const tx = await this.program.methods
+            .pauseMarket()
+            .accountsStrict({
+            market: params.market,
+            authority,
+        })
+            .transaction();
+        return tx;
+    }
+    async buildResumeMarketTransaction(params, authority) {
+        const tx = await this.program.methods
+            .resumeMarket()
+            .accountsStrict({
+            market: params.market,
+            authority,
+        })
+            .transaction();
+        return tx;
+    }
+    async buildCloseMarketOrderTransaction(params, signer) {
+        const tx = await this.program.methods
+            .closeMarketOrder()
+            .accountsStrict({
+            market: params.market,
+            order: params.order,
+            position: params.position,
+            marginAccount: params.marginAccount,
+            trader: signer,
+            priceUpdate: params.oracleAccount,
+        })
+            .transaction();
+        return tx;
+    }
+    buildLiquidateMarketOrderTransaction(params, signer) {
+        return this.program.methods
+            .liquidateMarketOrder()
+            .accountsStrict({
+            market: params.market,
+            order: params.order,
+            position: params.position,
+            marginAccount: params.marginAccount,
+            liquidator: signer,
+            priceUpdate: params.oracleAccount,
+        })
+            .transaction();
     }
 }
 exports.PerpetualSwapSDK = PerpetualSwapSDK;

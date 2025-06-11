@@ -25,6 +25,7 @@ export interface InitializeMarketParams {
     maintenanceMarginRatio: number;
     initialMarginRatio: number;
     maxLeverage: number;
+    liquidationFeeRatio: number;
     oracleAccount: PublicKey;
     mint: PublicKey;
 }

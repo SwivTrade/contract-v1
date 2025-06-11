@@ -1,9 +1,9 @@
-import { Program, AnchorProvider, web3, Wallet } from '@coral-xyz/anchor';
-import { PublicKey, Transaction, Keypair } from '@solana/web3.js';
+import { Program, AnchorProvider, BN, Wallet } from '@coral-xyz/anchor';
+import { PublicKey, Transaction, Keypair, Connection } from '@solana/web3.js';
 import type { Contracts } from "./idl/index";
 import { Market, InitializeMarketParams } from './types/market';
 import { MarginAccount, CreateMarginAccountParams, DepositCollateralParams, WithdrawCollateralParams } from './types/margin-account';
-import { Position, OpenPositionParams, ClosePositionParams } from './types/position';
+import { Position } from './types/position';
 import { MockOracle } from "./idl/mock_oracle";
 import { Oracle, InitializeOracleParams, UpdateOracleParams } from './types/oracle';
 /**
@@ -19,6 +19,7 @@ export declare class PerpetualSwapSDK {
     private provider;
     private isAdmin;
     private adminKeypair?;
+    private connection;
     /**
      * Initialize the SDK
      *
@@ -26,7 +27,7 @@ export declare class PerpetualSwapSDK {
      * @param wallet - Optional wallet for admin operations
      * @param adminKeypair - Optional admin keypair for admin operations
      */
-    constructor(connection: web3.Connection, wallet?: Wallet, adminKeypair?: Keypair);
+    constructor(connection: Connection, wallet?: Wallet, adminKeypair?: Keypair);
     /**
      * Check if the SDK is in admin mode
      */
@@ -78,11 +79,9 @@ export declare class PerpetualSwapSDK {
     /**
      * Build a transaction to open a position
      */
-    buildOpenPositionTransaction(params: OpenPositionParams, userPublicKey: PublicKey): Promise<Transaction>;
     /**
      * Build a transaction to close a position
      */
-    buildClosePositionTransaction(params: ClosePositionParams, userPublicKey: PublicKey): Promise<Transaction>;
     /**
      * Get market details
      */
@@ -110,11 +109,50 @@ export declare class PerpetualSwapSDK {
     /**
      * Find the PDA for a position
      */
-    findPositionPda(marketPda: PublicKey, owner: PublicKey, nonce: number): Promise<[PublicKey, number]>;
+    findPositionPda(market: PublicKey, trader: PublicKey, uid: number): Promise<[PublicKey, number]>;
     /**
      * Get all markets from the program
      */
     getAllMarkets(): Promise<Market[]>;
+    findOrderPda(market: PublicKey, trader: PublicKey, uid: number): Promise<[PublicKey, number]>;
+    getOrder(orderPda: PublicKey): Promise<any>;
+    /**
+     * Generate a unique ID for orders and positions
+     * Uses timestamp and random number to ensure uniqueness
+     */
+    private generateUid;
+    buildPlaceMarketOrderTransaction(params: {
+        market: PublicKey;
+        marginAccount: PublicKey;
+        side: {
+            long: {};
+        } | {
+            short: {};
+        };
+        size: BN;
+        leverage: BN;
+        oracleAccount: PublicKey;
+    }, trader: PublicKey): Promise<Transaction>;
+    buildPauseMarketTransaction(params: {
+        market: PublicKey;
+    }, authority: PublicKey): Promise<Transaction>;
+    buildResumeMarketTransaction(params: {
+        market: PublicKey;
+    }, authority: PublicKey): Promise<Transaction>;
+    buildCloseMarketOrderTransaction(params: {
+        market: PublicKey;
+        order: PublicKey;
+        position: PublicKey;
+        marginAccount: PublicKey;
+        oracleAccount: PublicKey;
+    }, signer: PublicKey): Promise<Transaction>;
+    buildLiquidateMarketOrderTransaction(params: {
+        market: PublicKey;
+        order: PublicKey;
+        position: PublicKey;
+        marginAccount: PublicKey;
+        oracleAccount: PublicKey;
+    }, signer: PublicKey): Promise<Transaction>;
 }
 export * from './types/market';
 export * from './types/margin-account';

@@ -1,5 +1,5 @@
 {
-    "address": "G2EDsqC3igU7f1PgvZgTSLdAMTn9qmwEq7y8Z92hFTCH",
+    "address": "8ZmTzEAVjMgp12aUUT7HkiVBknnd5W7x26Q2nqLFXhh9",
     "metadata": {
         "name": "mock_oracle",
         "version": "0.1.0",
@@ -59,7 +59,7 @@
                     "type": "string"
                 },
                 {
-                    "name": "price",
+                    "name": "initial_price",
                     "type": "u64"
                 }
             ]
