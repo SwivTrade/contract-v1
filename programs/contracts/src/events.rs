@@ -12,6 +12,7 @@ pub struct MarketInitializedEvent {
     pub maintenance_margin_ratio: u64,
     pub initial_margin_ratio: u64,
     pub max_leverage: u64,
+    pub liquidation_fee_ratio: u64,
 }
 
 #[event]

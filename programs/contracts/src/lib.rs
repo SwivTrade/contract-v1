@@ -10,9 +10,8 @@ pub mod state;
 use instructions::*;
 use state::*;
 
-// declare_id!("s2zmrr2SqcwCdeAGRiPFftDSV9CRhXqAbRcMgmh4goC");
-// declare_id!("2nga8op3u3j7Df7wsQv2n5hkRqjEFLjkWGGAfn4aHsfy");
-declare_id!("7gipafAxz4KSLL4Ja54aBEA86nMB4oAiW6qfZVW3qd6q");
+
+declare_id!("BSRWveJobC6xFCuo3wqwGGa4N1Kqcoc9r8H2AzCavvpg");
 
 #[program]
 pub mod contracts {
@@ -26,6 +25,7 @@ pub mod contracts {
         maintenance_margin_ratio: u64,
         initial_margin_ratio: u64,
         max_leverage: u64,
+        liquidation_fee_ratio: u64,
         bump: u8,
     ) -> Result<()> {
         instructions::market::initialize_market(
@@ -36,6 +36,7 @@ pub mod contracts {
             maintenance_margin_ratio,
             initial_margin_ratio,
             max_leverage,
+            liquidation_fee_ratio,
             bump,
         )
     }
@@ -68,20 +69,20 @@ pub mod contracts {
         instructions::funding::update_funding_payments(ctx)
     }
 
-    pub fn open_position(
-        ctx: Context<OpenPosition>,
-        side: Side,
-        size: u64,
-        leverage: u64,
-        bump: u8,
-        nonce: u8,
-    ) -> Result<()> {
-        instructions::position::open_position(ctx, side, size, leverage, bump, nonce)
-    }
+    // pub fn open_position(
+    //     ctx: Context<OpenPosition>,
+    //     side: Side,
+    //     size: u64,
+    //     leverage: u64,
+    //     bump: u8,
+    //     nonce: u8,
+    // ) -> Result<()> {
+    //     instructions::position::open_position(ctx, side, size, leverage, bump, nonce)
+    // }
 
-    pub fn close_position(ctx: Context<ClosePosition>) -> Result<()> {
-        instructions::position::close_position(ctx)
-    }
+    // pub fn close_position(ctx: Context<ClosePosition>) -> Result<()> {
+    //     instructions::position::close_position(ctx)
+    // }
 
     pub fn place_market_order(
         ctx: Context<PlaceMarketOrder>,
@@ -90,14 +91,17 @@ pub mod contracts {
         leverage: u64,
         order_bump: u8,
         position_bump: u8,
-        order_nonce: u8,
-        position_nonce: u8,
+        uid: u64,
     ) -> Result<()> {
-        instructions::order::place_market_order(ctx, side, size, leverage, order_bump, position_bump, order_nonce, position_nonce)
+        instructions::order::place_market_order(ctx, side, size, leverage, order_bump, position_bump, uid)
     }
 
     pub fn close_market_order(ctx: Context<CloseMarketOrder>) -> Result<()> {
         instructions::order::close_market_order(ctx)
+    }
+
+    pub fn liquidate_market_order(ctx: Context<LiquidateMarketOrder>) -> Result<()> {
+        instructions::order::liquidate_market_order(ctx)
     }
 
     // pub fn place_limit_order(

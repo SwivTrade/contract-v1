@@ -38,6 +38,7 @@ pub struct Market {
     pub funding_interval: i64,            // Interval between funding payments (e.g., 1 hour)
     pub maintenance_margin_ratio: u64,    // Minimum margin ratio before liquidation
     pub initial_margin_ratio: u64,        // Minimum margin ratio to open a position
+    pub liquidation_fee_ratio: u64,       // Fee ratio for liquidations (in basis points)
     pub fee_pool: u64,                    // Accumulated trading fees
     pub insurance_fund: u64,              // Insurance fund for socialized losses
     pub max_leverage: u64,                // Maximum allowed leverage
@@ -58,6 +59,7 @@ impl Market {
         8 + // funding_interval: i64
         8 + // maintenance_margin_ratio: u64
         8 + // initial_margin_ratio: u64
+        8 + // liquidation_fee_ratio: u64
         8 + // fee_pool: u64
         8 + // insurance_fund: u64
         8 + // max_leverage: u64

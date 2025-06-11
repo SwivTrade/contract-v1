@@ -10,6 +10,7 @@ use crate::{errors::ErrorCode, events::*, Market};
     maintenance_margin_ratio: u64,
     initial_margin_ratio: u64,
     max_leverage: u64,
+    liquidation_fee_ratio: u64,
     bump: u8
 )]
 pub struct InitializeMarket<'info> {
@@ -48,6 +49,7 @@ pub fn initialize_market(
     maintenance_margin_ratio: u64,
     initial_margin_ratio: u64,
     max_leverage: u64,
+    liquidation_fee_ratio: u64,
     bump: u8,
 ) -> Result<()> {
     // Validate inputs
@@ -62,6 +64,7 @@ pub fn initialize_market(
         ErrorCode::InvalidMarginRatio
     );
     require!(max_leverage > 0, ErrorCode::InvalidLeverage);
+    require!(liquidation_fee_ratio > 0 && liquidation_fee_ratio < 10000, ErrorCode::InvalidParameter);
 
     let market = &mut ctx.accounts.market;
     let authority = &ctx.accounts.authority;
@@ -77,6 +80,7 @@ pub fn initialize_market(
     market.funding_interval = funding_interval;
     market.maintenance_margin_ratio = maintenance_margin_ratio;
     market.initial_margin_ratio = initial_margin_ratio;
+    market.liquidation_fee_ratio = liquidation_fee_ratio;
     market.fee_pool = 0;
     market.insurance_fund = 0;
     market.max_leverage = max_leverage;
@@ -95,6 +99,7 @@ pub fn initialize_market(
         maintenance_margin_ratio,
         initial_margin_ratio,
         max_leverage,
+        liquidation_fee_ratio,
     });
 
     Ok(())

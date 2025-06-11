@@ -5,7 +5,7 @@
  * IDL can be found at `target/idl/contracts.json`.
  */
 export type Contracts = {
-  "address": "7gipafAxz4KSLL4Ja54aBEA86nMB4oAiW6qfZVW3qd6q",
+  "address": "BSRWveJobC6xFCuo3wqwGGa4N1Kqcoc9r8H2AzCavvpg",
   "metadata": {
     "name": "contracts",
     "version": "0.1.0",
@@ -52,48 +52,6 @@ export type Contracts = {
           "signer": true,
           "relations": [
             "order",
-            "position"
-          ]
-        },
-        {
-          "name": "priceUpdate"
-        }
-      ],
-      "args": []
-    },
-    {
-      "name": "closePosition",
-      "discriminator": [
-        123,
-        134,
-        81,
-        0,
-        49,
-        68,
-        98,
-        98
-      ],
-      "accounts": [
-        {
-          "name": "market",
-          "writable": true,
-          "relations": [
-            "position"
-          ]
-        },
-        {
-          "name": "position",
-          "writable": true
-        },
-        {
-          "name": "marginAccount",
-          "writable": true
-        },
-        {
-          "name": "trader",
-          "writable": true,
-          "signer": true,
-          "relations": [
             "position"
           ]
         },
@@ -338,26 +296,38 @@ export type Contracts = {
           "type": "u64"
         },
         {
+          "name": "liquidationFeeRatio",
+          "type": "u64"
+        },
+        {
           "name": "bump",
           "type": "u8"
         }
       ]
     },
     {
-      "name": "openPosition",
+      "name": "liquidateMarketOrder",
       "discriminator": [
-        135,
-        128,
-        47,
-        77,
-        15,
-        152,
-        240,
-        49
+        53,
+        184,
+        12,
+        203,
+        182,
+        112,
+        199,
+        146
       ],
       "accounts": [
         {
           "name": "market",
+          "writable": true,
+          "relations": [
+            "order",
+            "position"
+          ]
+        },
+        {
+          "name": "order",
           "writable": true
         },
         {
@@ -369,44 +339,15 @@ export type Contracts = {
           "writable": true
         },
         {
-          "name": "trader",
+          "name": "liquidator",
           "writable": true,
           "signer": true
         },
         {
           "name": "priceUpdate"
-        },
-        {
-          "name": "systemProgram",
-          "address": "11111111111111111111111111111111"
         }
       ],
-      "args": [
-        {
-          "name": "side",
-          "type": {
-            "defined": {
-              "name": "side"
-            }
-          }
-        },
-        {
-          "name": "size",
-          "type": "u64"
-        },
-        {
-          "name": "leverage",
-          "type": "u64"
-        },
-        {
-          "name": "bump",
-          "type": "u8"
-        },
-        {
-          "name": "nonce",
-          "type": "u8"
-        }
-      ]
+      "args": []
     },
     {
       "name": "pauseMarket",
@@ -454,11 +395,66 @@ export type Contracts = {
         },
         {
           "name": "order",
-          "writable": true
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  111,
+                  114,
+                  100,
+                  101,
+                  114
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "market"
+              },
+              {
+                "kind": "account",
+                "path": "trader"
+              },
+              {
+                "kind": "arg",
+                "path": "uid"
+              }
+            ]
+          }
         },
         {
           "name": "position",
-          "writable": true
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  111,
+                  115,
+                  105,
+                  116,
+                  105,
+                  111,
+                  110
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "market"
+              },
+              {
+                "kind": "account",
+                "path": "trader"
+              },
+              {
+                "kind": "arg",
+                "path": "uid"
+              }
+            ]
+          }
         },
         {
           "name": "marginAccount",
@@ -503,12 +499,8 @@ export type Contracts = {
           "type": "u8"
         },
         {
-          "name": "orderNonce",
-          "type": "u8"
-        },
-        {
-          "name": "positionNonce",
-          "type": "u8"
+          "name": "uid",
+          "type": "u64"
         }
       ]
     },
@@ -1346,6 +1338,10 @@ export type Contracts = {
             "type": "u64"
           },
           {
+            "name": "liquidationFeeRatio",
+            "type": "u64"
+          },
+          {
             "name": "feePool",
             "type": "u64"
           },
@@ -1411,6 +1407,10 @@ export type Contracts = {
           },
           {
             "name": "maxLeverage",
+            "type": "u64"
+          },
+          {
+            "name": "liquidationFeeRatio",
             "type": "u64"
           }
         ]
