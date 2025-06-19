@@ -128,7 +128,6 @@ pub fn create_margin_account(ctx: Context<CreateMarginAccount>, margin_type: Mar
     margin_account.collateral = 0;
     margin_account.allocated_margin = 0;
     margin_account.positions = Vec::new();
-    margin_account.orders = Vec::new();
     margin_account.bump = bump;
 
     emit!(MarginAccountCreated {

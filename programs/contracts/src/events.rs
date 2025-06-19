@@ -88,12 +88,15 @@ pub struct PositionLiquidatedEvent {
     pub market: Pubkey,
     pub position: Pubkey,
     pub trader: Pubkey,
-    pub liquidator: Pubkey,
+    pub side: Side,
     pub size: u64,
     pub collateral: u64,
-    pub liquidation_price: u64,
+    pub entry_price: u64,
+    pub exit_price: u64,
+    pub liquidator: Pubkey,
     pub liquidation_fee: u64,
-    pub margin_type: MarginType,
+    pub liquidator_fee: u64,
+    pub insurance_fund_fee: u64,
 }
 
 #[event]
@@ -109,7 +112,7 @@ pub struct MarginAdjustedEvent {
 #[event]
 pub struct OrderPlacedEvent {
     pub market: Pubkey,
-    pub order: Pubkey,
+    pub position: Pubkey,
     pub trader: Pubkey,
     pub side: Side,
     pub order_type: OrderType,
@@ -122,7 +125,7 @@ pub struct OrderPlacedEvent {
 #[event]
 pub struct OrderFilledEvent {
     pub market: Pubkey,
-    pub order: Pubkey,
+    pub position: Pubkey,
     pub trader: Pubkey,
     pub side: Side,
     pub price: u64,

@@ -320,61 +320,6 @@ export class PerpetualSwapSDK {
     return transaction;
   }
 
-  /**
-   * Build a transaction to open a position
-   */
-  // async buildOpenPositionTransaction(
-  //   params: OpenPositionParams,
-  //   userPublicKey: PublicKey
-  // ): Promise<Transaction> {
-  //   const [positionPda, positionBump] = await this.findPositionPda(
-  //     params.market,
-  //     userPublicKey,
-  //     params.nonce
-  //   );
-
-  //   const instruction = await this.program.methods
-  //     .openPosition(params.side, params.size, params.leverage, positionBump, params.nonce)
-  //     .accountsStrict({
-  //       market: params.market,
-  //       position: positionPda,
-  //       marginAccount: params.marginAccount,
-  //       trader: userPublicKey,
-  //       priceUpdate: params.oracleAccount,
-  //       systemProgram: SystemProgram.programId,
-  //     })
-  //     .instruction();
-
-  //   const transaction = new Transaction();
-  //   transaction.add(instruction);
-    
-  //   return transaction;
-  // }
-
-  /**
-   * Build a transaction to close a position
-   */
-  // async buildClosePositionTransaction(
-  //   params: ClosePositionParams,
-  //   userPublicKey: PublicKey
-  // ): Promise<Transaction> {
-  //   const instruction = await this.program.methods
-  //     .closePosition()
-  //     .accountsStrict({
-  //       market: params.market,
-  //       position: params.position,
-  //       marginAccount: params.marginAccount,
-  //       trader: userPublicKey,
-  //       priceUpdate: params.oracleAccount,
-  //     })
-  //     .instruction();
-
-  //   const transaction = new Transaction();
-  //   transaction.add(instruction);
-    
-  //   return transaction;
-  // }
-
   // ===== READ OPERATIONS =====
 
   /**
@@ -451,8 +396,15 @@ export class PerpetualSwapSDK {
     return markets.map(market => market.account as unknown as Market);
   }
 
-  async findOrderPda(market: PublicKey, trader: PublicKey, uid: number): Promise<[PublicKey, number]> {
-    return await PublicKey.findProgramAddress(
+  /**
+   * Find the PDA for an order
+   */
+  async findOrderPda(
+    market: PublicKey,
+    trader: PublicKey,
+    uid: number
+  ): Promise<[PublicKey, number]> {
+    return PublicKey.findProgramAddress(
       [
         Buffer.from("order"),
         market.toBuffer(),
@@ -463,51 +415,42 @@ export class PerpetualSwapSDK {
     );
   }
 
-  async getOrder(orderPda: PublicKey) {
-    return await this.program.account.order.fetch(orderPda) as any;
-  }
 
   /**
    * Generate a unique ID for orders and positions
    * Uses timestamp and random number to ensure uniqueness
    */
   private generateUid(): number {
-    // Use a combination of timestamp and random number that stays within safe integer range
-    const timestamp = Math.floor(Date.now() / 1000); // Convert to seconds
-    const random = Math.floor(Math.random() * 10000); // 4 digits of randomness
-    return timestamp * 10000 + random; // This will stay within safe integer range
+    return Date.now() + Math.floor(Math.random() * 1000);
   }
 
   async buildPlaceMarketOrderTransaction(
     params: {
       market: PublicKey;
       marginAccount: PublicKey;
-      side: { long: {} } | { short: {} };
+      side: Side;
       size: BN;
       leverage: BN;
       oracleAccount: PublicKey;
     },
-    trader: PublicKey
+    signer: PublicKey
   ): Promise<Transaction> {
     const uid = this.generateUid();
-    const [orderPda] = await this.findOrderPda(params.market, trader, uid);
-    const [positionPda] = await this.findPositionPda(params.market, trader, uid);
+    const [positionPda, positionBump] = await this.findPositionPda(params.market, signer, uid);
 
     const tx = await this.program.methods
       .placeMarketOrder(
-        params.side,
+        params.side === 'long' ? { long: {} } : { short: {} },
         params.size,
         params.leverage,
-        0, // order_bump will be calculated by Anchor
-        0, // position_bump will be calculated by Anchor
+        positionBump,
         new BN(uid)
       )
       .accountsStrict({
         market: params.market,
-        order: orderPda,
         position: positionPda,
         marginAccount: params.marginAccount,
-        trader,
+        trader: signer,
         priceUpdate: params.oracleAccount,
         systemProgram: SystemProgram.programId,
       })
@@ -553,7 +496,6 @@ export class PerpetualSwapSDK {
   async buildCloseMarketOrderTransaction(
     params: {
       market: PublicKey;
-      order: PublicKey;
       position: PublicKey;
       marginAccount: PublicKey;
       oracleAccount: PublicKey;
@@ -564,12 +506,11 @@ export class PerpetualSwapSDK {
       .closeMarketOrder()
       .accountsStrict({
         market: params.market,
-        order: params.order,
         position: params.position,
         marginAccount: params.marginAccount,
         trader: signer,
         priceUpdate: params.oracleAccount,
-      } as any)
+      })
       .transaction();
     return tx;
   }
@@ -577,7 +518,6 @@ export class PerpetualSwapSDK {
   buildLiquidateMarketOrderTransaction(
     params: {
       market: PublicKey;
-      order: PublicKey;
       position: PublicKey;
       marginAccount: PublicKey;
       oracleAccount: PublicKey;
@@ -588,7 +528,6 @@ export class PerpetualSwapSDK {
       .liquidateMarketOrder()
       .accountsStrict({
         market: params.market,
-        order: params.order,
         position: params.position,
         marginAccount: params.marginAccount,
         liquidator: signer,

@@ -3,10 +3,8 @@ use crate::errors::ErrorCode;
 
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, PartialEq, Copy)]
 pub enum OrderType {
-    Limit,
     Market,
-    StopLoss,
-    TakeProfit,
+    Limit,
 }
 
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, PartialEq, Copy, Debug)]
@@ -73,8 +71,11 @@ impl Market {
 pub struct Position {
     pub trader: Pubkey,                   // Owner of the position
     pub market: Pubkey,                   // Market this position belongs to
+    pub order_type: OrderType,            // Market or Limit
     pub side: Side,                       // Long or Short
     pub size: u64,                        // Size of the position in base asset
+    pub filled_size: u64,                 // Amount already filled (for limit orders)
+    pub price: u64,                       // Current price (entry price for market orders)
     pub collateral: u64,                  // Collateral provided by the trader
     pub entry_price: u64,                 // Price at position opening
     pub entry_funding_rate: i64,          // Funding rate at position opening
@@ -82,13 +83,30 @@ pub struct Position {
     pub realized_pnl: i64,                // Realized profit and loss
     pub last_funding_payment_time: i64,   // Last time funding was paid/collected
     pub last_cumulative_funding: i64,     // Cumulative funding at last update
-    pub liquidation_price: u64,           // Price at which position gets liquidated
     pub is_open: bool,                    // Whether the position is open
+    pub created_at: i64,                  // Timestamp when position was created
     pub bump: u8,                         // PDA bump
 }
 
 impl Position {
-    pub const SPACE: usize = 8 + 32 + 32 + 1 + 8 + 8 + 8 + 8 + 8 + 8 + 8 + 8 + 8 + 1 + 1;
+    pub const SPACE: usize = 8 + // discriminator
+        32 + // trader: Pubkey
+        32 + // market: Pubkey
+        1 + // order_type: OrderType
+        1 + // side: Side
+        8 + // size: u64
+        8 + // filled_size: u64
+        8 + // price: u64
+        8 + // collateral: u64
+        8 + // entry_price: u64
+        8 + // entry_funding_rate: i64
+        8 + // leverage: u64
+        8 + // realized_pnl: i64
+        8 + // last_funding_payment_time: i64
+        8 + // last_cumulative_funding: i64
+        1 + // is_open: bool
+        8 + // created_at: i64
+        1; // bump: u8
 }
 
 #[account]
@@ -119,13 +137,19 @@ pub struct MarginAccount {
     pub margin_type: MarginType,  // New field to specify margin type
     pub collateral: u64,
     pub allocated_margin: u64,    // For isolated margin tracking
-    pub orders: Vec<Pubkey>,
-    pub positions: Vec<Pubkey>,
+    pub positions: Vec<Pubkey>,   // Only track positions now
     pub bump: u8,
 }
 
 impl MarginAccount {
-    pub const SPACE: usize = 8 + 32 + 32 + 1 + 8 + 8 + 4 + (32 * 20) + 4 + (32 * 10) + 1;
+    pub const SPACE: usize = 8 + // discriminator
+        32 + // owner: Pubkey
+        32 + // perp_market: Pubkey
+        1 + // margin_type: MarginType
+        8 + // collateral: u64
+        8 + // allocated_margin: u64
+        4 + (32 * 10) + // positions: Vec<Pubkey> (max 10 positions)
+        1; // bump: u8
 
     pub fn available_margin(&self) -> Result<u64> {
         match self.margin_type {

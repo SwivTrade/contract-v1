@@ -1,20 +1,16 @@
 use anchor_lang::prelude::*;
 use mock_oracle::Oracle;
-use crate::{errors::ErrorCode, events::*, {Market, Order, OrderType, Side, MarginAccount, MarginType, Position}};
+use crate::{
+    errors::ErrorCode,
+    events::*,
+    state::{Market, Position, OrderType, Side, MarginAccount, MarginType}
+};
 
 #[derive(Accounts)]
-#[instruction(side: Side, size: u64, leverage: u64, order_bump: u8, position_bump: u8, uid: u64)]
+#[instruction(side: Side, size: u64, leverage: u64, position_bump: u8, uid: u64)]
 pub struct PlaceMarketOrder<'info> {
     #[account(mut, constraint = market.is_active @ ErrorCode::MarketInactive)]
     pub market: Account<'info, Market>,
-    #[account(
-        init,
-        payer = trader,
-        space = Order::SPACE,
-        seeds = [b"order", market.key().as_ref(), trader.key().as_ref(), &uid.to_le_bytes()],
-        bump
-    )]
-    pub order: Account<'info, Order>,
     #[account(
         init,
         payer = trader,
@@ -25,7 +21,6 @@ pub struct PlaceMarketOrder<'info> {
     pub position: Account<'info, Position>,
     #[account(
         mut,
-        //constraint = margin_account.owner == trader.key() @ ErrorCode::Unauthorized,
         constraint = margin_account.perp_market == market.key() @ ErrorCode::InvalidParameter,
     )]
     pub margin_account: Account<'info, MarginAccount>,
@@ -41,12 +36,10 @@ pub fn place_market_order(
     side: Side,
     size: u64,
     leverage: u64,
-    order_bump: u8,
     position_bump: u8,
     _uid: u64,
 ) -> Result<()> {
     let market = &mut ctx.accounts.market;
-    let order = &mut ctx.accounts.order;
     let position = &mut ctx.accounts.position;
     let margin_account = &mut ctx.accounts.margin_account;
     let trader = &ctx.accounts.trader;
@@ -109,25 +102,14 @@ pub fn place_market_order(
         }
     }
 
-    // Initialize order
-    order.trader = trader.key();
-    order.market = market.key();
-    order.side = side;
-    order.order_type = OrderType::Market;
-    order.price = current_price;
-    order.size = size;
-    order.filled_size = size; // Market orders fill immediately
-    order.leverage = leverage;
-    order.collateral = required_collateral;
-    order.created_at = current_timestamp;
-    order.is_active = false; // Market orders complete immediately
-    order.bump = order_bump;
-
     // Initialize position
     position.trader = trader.key();
     position.market = market.key();
+    position.order_type = OrderType::Market;
     position.side = side;
     position.size = size;
+    position.filled_size = size; // Market orders fill immediately
+    position.price = current_price;
     position.collateral = required_collateral;
     position.entry_price = current_price;
     position.entry_funding_rate = market.funding_rate;
@@ -135,8 +117,8 @@ pub fn place_market_order(
     position.realized_pnl = 0;
     position.last_funding_payment_time = current_timestamp;
     position.last_cumulative_funding = 0;
-    position.liquidation_price = 0; // Will be calculated in a separate instruction
     position.is_open = true;
+    position.created_at = current_timestamp;
     position.bump = position_bump;
 
     // Update market state
@@ -153,14 +135,13 @@ pub fn place_market_order(
         }
     }
 
-    // Add order and position to margin account
-    margin_account.orders.push(order.key());
+    // Add position to margin account
     margin_account.positions.push(position.key());
 
     // Emit events
     emit!(OrderPlacedEvent {
         market: market.key(),
-        order: order.key(),
+        position: position.key(),
         trader: trader.key(),
         side,
         order_type: OrderType::Market,
@@ -172,7 +153,7 @@ pub fn place_market_order(
 
     emit!(OrderFilledEvent {
         market: market.key(),
-        order: order.key(),
+        position: position.key(),
         trader: trader.key(),
         side,
         price: current_price,
@@ -192,20 +173,12 @@ pub struct CloseMarketOrder<'info> {
         mut,
         has_one = trader,
         has_one = market,
-        close = trader  // This closes the order account and sends rent to trader
-    )]
-    pub order: Account<'info, Order>,
-    #[account(
-        mut,
-        has_one = trader,
-        has_one = market,
         constraint = position.is_open @ ErrorCode::PositionClosed,
         close = trader  // This closes the position account and sends rent to trader
     )]
     pub position: Account<'info, Position>,
     #[account(
         mut,
-        //constraint = margin_account.owner == trader.key() @ ErrorCode::Unauthorized,
         constraint = margin_account.perp_market == market.key() @ ErrorCode::InvalidParameter,
     )]
     pub margin_account: Account<'info, MarginAccount>,
@@ -217,7 +190,6 @@ pub struct CloseMarketOrder<'info> {
 
 pub fn close_market_order(ctx: Context<CloseMarketOrder>) -> Result<()> {
     let market = &mut ctx.accounts.market;
-    let order = &mut ctx.accounts.order;
     let position = &mut ctx.accounts.position;
     let margin_account = &mut ctx.accounts.margin_account;
     let trader = &ctx.accounts.trader;
@@ -228,89 +200,128 @@ pub fn close_market_order(ctx: Context<CloseMarketOrder>) -> Result<()> {
     let current_price = oracle.price;
 
     // Calculate PnL
-    let entry_value = position.size
-        .checked_mul(position.entry_price)
-        .ok_or(ErrorCode::MathOverflow)?;
+    msg!("Starting PnL calculation...");
+    msg!("Position size: {}", position.size);
+    msg!("Entry price: {}", position.entry_price);
+    msg!("Current price: {}", current_price);
 
-    let exit_value = position.size
-        .checked_mul(current_price)
-        .ok_or(ErrorCode::MathOverflow)?;
+    // Convert values to i64 for PnL calculation
+    let entry_price: i64 = position.entry_price as i64;
+    let exit_price: i64 = current_price as i64;
+    let size: i64 = position.size as i64;
 
-    let entry_value_i64 = entry_value as i64;
-    let exit_value_i64 = exit_value as i64;
-
+    // Calculate PnL based on position side
     let pnl = match position.side {
-        Side::Long => exit_value_i64.checked_sub(entry_value_i64),
-        Side::Short => entry_value_i64.checked_sub(exit_value_i64),
-    }.ok_or(ErrorCode::MathOverflow)?;
+        Side::Long => {
+            msg!("Calculating long PnL: (exit_price - entry_price) * size");
+            let price_diff = exit_price.checked_sub(entry_price)
+                .ok_or_else(|| {
+                    msg!("Overflow in price difference calculation for long");
+                    ErrorCode::MathOverflow
+                })?;
+            price_diff.checked_mul(size)
+        },
+        Side::Short => {
+            msg!("Calculating short PnL: (entry_price - exit_price) * size");
+            let price_diff = entry_price.checked_sub(exit_price)
+                .ok_or_else(|| {
+                    msg!("Overflow in price difference calculation for short");
+                    ErrorCode::MathOverflow
+                })?;
+            price_diff.checked_mul(size)
+        }
+    }.ok_or_else(|| {
+        msg!("Overflow in PnL calculation");
+        ErrorCode::MathOverflow
+    })?;
+    msg!("Final PnL: {}", pnl);
 
-    // Store values before accounts are closed
+    // Store values before account is closed
     let position_side = position.side;
     let position_size = position.size;
     let position_collateral = position.collateral;
     let position_entry_price = position.entry_price;
     let position_key = position.key();
-    let order_key = order.key();
 
     // Update market state
     match position_side {
         Side::Long => {
+            msg!("Updating market state for long position");
             market.base_asset_reserve = market.base_asset_reserve
                 .checked_sub(position_size)
-                .ok_or(ErrorCode::MathOverflow)?;
+                .ok_or_else(|| {
+                    msg!("Overflow in base_asset_reserve subtraction: {} - {}", market.base_asset_reserve, position_size);
+                    ErrorCode::MathOverflow
+                })?;
         }
         Side::Short => {
+            msg!("Updating market state for short position");
             market.base_asset_reserve = market.base_asset_reserve
                 .checked_add(position_size)
-                .ok_or(ErrorCode::MathOverflow)?;
+                .ok_or_else(|| {
+                    msg!("Overflow in base_asset_reserve addition: {} + {}", market.base_asset_reserve, position_size);
+                    ErrorCode::MathOverflow
+                })?;
         }
     }
 
     // Update margin account based on margin type
     match margin_account.margin_type {
         MarginType::Isolated => {
+            msg!("Updating isolated margin account");
             margin_account.allocated_margin = margin_account.allocated_margin
                 .checked_sub(position_collateral)
-                .ok_or(ErrorCode::MathOverflow)?;
+                .ok_or_else(|| {
+                    msg!("Overflow in allocated_margin subtraction: {} - {}", margin_account.allocated_margin, position_collateral);
+                    ErrorCode::MathOverflow
+                })?;
             
             if pnl > 0 {
+                msg!("Adding positive PnL to collateral: {}", pnl);
                 margin_account.collateral = margin_account.collateral
                     .checked_add(pnl as u64)
-                    .ok_or(ErrorCode::MathOverflow)?;
+                    .ok_or_else(|| {
+                        msg!("Overflow in collateral addition: {} + {}", margin_account.collateral, pnl);
+                        ErrorCode::MathOverflow
+                    })?;
             } else {
+                msg!("Subtracting negative PnL from collateral: {}", -pnl);
                 margin_account.collateral = margin_account.collateral
                     .checked_sub((-pnl) as u64)
-                    .ok_or(ErrorCode::MathOverflow)?;
+                    .ok_or_else(|| {
+                        msg!("Overflow in collateral subtraction: {} - {}", margin_account.collateral, -pnl);
+                        ErrorCode::MathOverflow
+                    })?;
             }
         },
         MarginType::Cross => {
+            msg!("Updating cross margin account");
             if pnl > 0 {
+                msg!("Adding positive PnL to collateral: {}", pnl);
                 margin_account.collateral = margin_account.collateral
                     .checked_add(pnl as u64)
-                    .ok_or(ErrorCode::MathOverflow)?;
+                    .ok_or_else(|| {
+                        msg!("Overflow in collateral addition: {} + {}", margin_account.collateral, pnl);
+                        ErrorCode::MathOverflow
+                    })?;
             } else {
+                msg!("Subtracting negative PnL from collateral: {}", -pnl);
                 margin_account.collateral = margin_account.collateral
                     .checked_sub((-pnl) as u64)
-                    .ok_or(ErrorCode::MathOverflow)?;
+                    .ok_or_else(|| {
+                        msg!("Overflow in collateral subtraction: {} - {}", margin_account.collateral, -pnl);
+                        ErrorCode::MathOverflow
+                    })?;
             }
         }
     }
 
-    // Remove order and position from margin account's lists
+    // Remove position from margin account's list
     if let Some(pos) = margin_account.positions.iter().position(|&p| p == position_key) {
         margin_account.positions.remove(pos);
     }
-    if let Some(ord) = margin_account.orders.iter().position(|&o| o == order_key) {
-        margin_account.orders.remove(ord);
-    }
 
     // Emit events
-    emit!(OrderCancelledEvent {
-        market: market.key(),
-        order: order_key,
-        trader: trader.key(),
-    });
-
     emit!(PositionClosedEvent {
         market: market.key(),
         position: position_key,
@@ -334,12 +345,6 @@ pub struct LiquidateMarketOrder<'info> {
     #[account(
         mut,
         has_one = market,
-        close = liquidator  // This closes the order account and sends rent to liquidator
-    )]
-    pub order: Account<'info, Order>,
-    #[account(
-        mut,
-        has_one = market,
         constraint = position.is_open @ ErrorCode::PositionClosed,
         close = liquidator  // This closes the position account and sends rent to liquidator
     )]
@@ -358,7 +363,6 @@ pub struct LiquidateMarketOrder<'info> {
 
 pub fn liquidate_market_order(ctx: Context<LiquidateMarketOrder>) -> Result<()> {
     let market = &mut ctx.accounts.market;
-    let order = &mut ctx.accounts.order;
     let position = &mut ctx.accounts.position;
     let margin_account = &mut ctx.accounts.margin_account;
     let _liquidator = &ctx.accounts.liquidator;
@@ -467,17 +471,16 @@ pub fn liquidate_market_order(ctx: Context<LiquidateMarketOrder>) -> Result<()> 
         })?;
     msg!("Updated insurance fund: {}", market.insurance_fund);
 
-    // Store values before accounts are closed
+    // Store values before account is closed
     let position_side = position.side;
     let position_size = position.size;
     let position_collateral = position.collateral;
-    let _position_entry_price = position.entry_price;
     let position_key = position.key();
-    let order_key = order.key();
 
     // Update market state
     match position_side {
         Side::Long => {
+            msg!("Updating market state for long position");
             market.base_asset_reserve = market.base_asset_reserve
                 .checked_sub(position_size)
                 .ok_or_else(|| {
@@ -486,6 +489,7 @@ pub fn liquidate_market_order(ctx: Context<LiquidateMarketOrder>) -> Result<()> 
                 })?;
         }
         Side::Short => {
+            msg!("Updating market state for short position");
             market.base_asset_reserve = market.base_asset_reserve
                 .checked_add(position_size)
                 .ok_or_else(|| {
@@ -508,25 +512,31 @@ pub fn liquidate_market_order(ctx: Context<LiquidateMarketOrder>) -> Result<()> 
     msg!("Updated margin account collateral: {}", margin_account.collateral);
     msg!("Updated margin account allocated margin: {}", margin_account.allocated_margin);
 
-    // Remove position and order from margin account
+    // Remove position from margin account
     margin_account.positions.retain(|&x| x != position_key);
-    margin_account.orders.retain(|&x| x != order_key);
-    msg!("Removed position and order from margin account");
+    msg!("Removed position from margin account");
 
-    // Close position and order accounts
+    // Close position account
     position.is_open = false;
-    order.is_active = false;
-    msg!("Closed position and order accounts");
+    msg!("Closed position account");
 
     // TODO: Transfer liquidator_fee to liquidator
 
     // Emit events
-    emit!(OrderCancelledEvent {
-        order: order_key,
-        trader: position.trader,
+    emit!(PositionLiquidatedEvent {
         market: market.key(),
+        position: position_key,
+        trader: position.trader,
+        side: position_side,
+        size: position_size,
+        collateral: position_collateral,
+        entry_price: position.entry_price,
+        exit_price: current_price,
+        liquidator: _liquidator.key(),
+        liquidation_fee,
+        liquidator_fee,
+        insurance_fund_fee,
     });
-
 
     Ok(())
 }

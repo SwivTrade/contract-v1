@@ -11,7 +11,7 @@ use instructions::*;
 use state::*;
 
 
-declare_id!("BSRWveJobC6xFCuo3wqwGGa4N1Kqcoc9r8H2AzCavvpg");
+declare_id!("AjNFVGrgdphuxJ1oyHkzZKPDBusjd5uogbWH3NXTbzzG");
 
 #[program]
 pub mod contracts {
@@ -69,31 +69,15 @@ pub mod contracts {
         instructions::funding::update_funding_payments(ctx)
     }
 
-    // pub fn open_position(
-    //     ctx: Context<OpenPosition>,
-    //     side: Side,
-    //     size: u64,
-    //     leverage: u64,
-    //     bump: u8,
-    //     nonce: u8,
-    // ) -> Result<()> {
-    //     instructions::position::open_position(ctx, side, size, leverage, bump, nonce)
-    // }
-
-    // pub fn close_position(ctx: Context<ClosePosition>) -> Result<()> {
-    //     instructions::position::close_position(ctx)
-    // }
-
     pub fn place_market_order(
         ctx: Context<PlaceMarketOrder>,
         side: Side,
         size: u64,
         leverage: u64,
-        order_bump: u8,
         position_bump: u8,
         uid: u64,
     ) -> Result<()> {
-        instructions::order::place_market_order(ctx, side, size, leverage, order_bump, position_bump, uid)
+        instructions::order::place_market_order(ctx, side, size, leverage, position_bump, uid)
     }
 
     pub fn close_market_order(ctx: Context<CloseMarketOrder>) -> Result<()> {
@@ -103,27 +87,4 @@ pub mod contracts {
     pub fn liquidate_market_order(ctx: Context<LiquidateMarketOrder>) -> Result<()> {
         instructions::order::liquidate_market_order(ctx)
     }
-
-    // pub fn place_limit_order(
-    //     ctx: Context<PlaceLimitOrder>,
-    //     side: Side,
-    //     price: u64,
-    //     size: u64,
-    //     leverage: u64,
-    //     bump: u8,
-    // ) -> Result<()> {
-    //     instructions::order::place_limit_order(ctx, side, price, size, leverage, bump)
-    // }
-
-    // pub fn cancel_order(ctx: Context<CancelOrder>) -> Result<()> {
-    //     instructions::order::cancel_order(ctx)
-    // }
-
-    // pub fn adjust_position_margin(ctx: Context<AdjustPositionMargin>, margin_change: i64) -> Result<()> {
-    //     instructions::position::adjust_position_margin(ctx, margin_change)
-    // }
-
-    // pub fn liquidate_position(ctx: Context<LiquidatePosition>) -> Result<()> {
-    //     instructions::position::liquidate_position(ctx)
-    // }
 }

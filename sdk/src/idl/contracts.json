@@ -1,5 +1,5 @@
 {
-  "address": "BSRWveJobC6xFCuo3wqwGGa4N1Kqcoc9r8H2AzCavvpg",
+  "address": "AjNFVGrgdphuxJ1oyHkzZKPDBusjd5uogbWH3NXTbzzG",
   "metadata": {
     "name": "contracts",
     "version": "0.1.0",
@@ -24,13 +24,8 @@
           "name": "market",
           "writable": true,
           "relations": [
-            "order",
             "position"
           ]
-        },
-        {
-          "name": "order",
-          "writable": true
         },
         {
           "name": "position",
@@ -45,7 +40,6 @@
           "writable": true,
           "signer": true,
           "relations": [
-            "order",
             "position"
           ]
         },
@@ -316,13 +310,8 @@
           "name": "market",
           "writable": true,
           "relations": [
-            "order",
             "position"
           ]
-        },
-        {
-          "name": "order",
-          "writable": true
         },
         {
           "name": "position",
@@ -386,36 +375,6 @@
         {
           "name": "market",
           "writable": true
-        },
-        {
-          "name": "order",
-          "writable": true,
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  111,
-                  114,
-                  100,
-                  101,
-                  114
-                ]
-              },
-              {
-                "kind": "account",
-                "path": "market"
-              },
-              {
-                "kind": "account",
-                "path": "trader"
-              },
-              {
-                "kind": "arg",
-                "path": "uid"
-              }
-            ]
-          }
         },
         {
           "name": "position",
@@ -483,10 +442,6 @@
         {
           "name": "leverage",
           "type": "u64"
-        },
-        {
-          "name": "order_bump",
-          "type": "u8"
         },
         {
           "name": "position_bump",
@@ -655,19 +610,6 @@
         227,
         198,
         154
-      ]
-    },
-    {
-      "name": "Order",
-      "discriminator": [
-        134,
-        173,
-        223,
-        185,
-        77,
-        86,
-        28,
-        51
       ]
     },
     {
@@ -1198,12 +1140,6 @@
             "type": "u64"
           },
           {
-            "name": "orders",
-            "type": {
-              "vec": "pubkey"
-            }
-          },
-          {
             "name": "positions",
             "type": {
               "vec": "pubkey"
@@ -1475,70 +1411,6 @@
       }
     },
     {
-      "name": "Order",
-      "type": {
-        "kind": "struct",
-        "fields": [
-          {
-            "name": "trader",
-            "type": "pubkey"
-          },
-          {
-            "name": "market",
-            "type": "pubkey"
-          },
-          {
-            "name": "side",
-            "type": {
-              "defined": {
-                "name": "Side"
-              }
-            }
-          },
-          {
-            "name": "order_type",
-            "type": {
-              "defined": {
-                "name": "OrderType"
-              }
-            }
-          },
-          {
-            "name": "price",
-            "type": "u64"
-          },
-          {
-            "name": "size",
-            "type": "u64"
-          },
-          {
-            "name": "filled_size",
-            "type": "u64"
-          },
-          {
-            "name": "leverage",
-            "type": "u64"
-          },
-          {
-            "name": "collateral",
-            "type": "u64"
-          },
-          {
-            "name": "created_at",
-            "type": "i64"
-          },
-          {
-            "name": "is_active",
-            "type": "bool"
-          },
-          {
-            "name": "bump",
-            "type": "u8"
-          }
-        ]
-      }
-    },
-    {
       "name": "OrderCancelledEvent",
       "type": {
         "kind": "struct",
@@ -1568,7 +1440,7 @@
             "type": "pubkey"
           },
           {
-            "name": "order",
+            "name": "position",
             "type": "pubkey"
           },
           {
@@ -1612,7 +1484,7 @@
             "type": "pubkey"
           },
           {
-            "name": "order",
+            "name": "position",
             "type": "pubkey"
           },
           {
@@ -1660,16 +1532,10 @@
         "kind": "enum",
         "variants": [
           {
-            "name": "Limit"
-          },
-          {
             "name": "Market"
           },
           {
-            "name": "StopLoss"
-          },
-          {
-            "name": "TakeProfit"
+            "name": "Limit"
           }
         ]
       }
@@ -1688,6 +1554,14 @@
             "type": "pubkey"
           },
           {
+            "name": "order_type",
+            "type": {
+              "defined": {
+                "name": "OrderType"
+              }
+            }
+          },
+          {
             "name": "side",
             "type": {
               "defined": {
@@ -1697,6 +1571,14 @@
           },
           {
             "name": "size",
+            "type": "u64"
+          },
+          {
+            "name": "filled_size",
+            "type": "u64"
+          },
+          {
+            "name": "price",
             "type": "u64"
           },
           {
@@ -1728,12 +1610,12 @@
             "type": "i64"
           },
           {
-            "name": "liquidation_price",
-            "type": "u64"
-          },
-          {
             "name": "is_open",
             "type": "bool"
+          },
+          {
+            "name": "created_at",
+            "type": "i64"
           },
           {
             "name": "bump",
@@ -1816,8 +1698,12 @@
             "type": "pubkey"
           },
           {
-            "name": "liquidator",
-            "type": "pubkey"
+            "name": "side",
+            "type": {
+              "defined": {
+                "name": "Side"
+              }
+            }
           },
           {
             "name": "size",
@@ -1828,20 +1714,28 @@
             "type": "u64"
           },
           {
-            "name": "liquidation_price",
+            "name": "entry_price",
             "type": "u64"
+          },
+          {
+            "name": "exit_price",
+            "type": "u64"
+          },
+          {
+            "name": "liquidator",
+            "type": "pubkey"
           },
           {
             "name": "liquidation_fee",
             "type": "u64"
           },
           {
-            "name": "margin_type",
-            "type": {
-              "defined": {
-                "name": "MarginType"
-              }
-            }
+            "name": "liquidator_fee",
+            "type": "u64"
+          },
+          {
+            "name": "insurance_fund_fee",
+            "type": "u64"
           }
         ]
       }
