@@ -11,7 +11,7 @@ use instructions::*;
 use state::*;
 
 
-declare_id!("AjNFVGrgdphuxJ1oyHkzZKPDBusjd5uogbWH3NXTbzzG");
+declare_id!("9wdJq5R7VUuXDrAZBnXfDqc1vW6nwAW5aYneMKiryppz");
 
 #[program]
 pub mod contracts {
@@ -47,6 +47,22 @@ pub mod contracts {
 
     pub fn resume_market(ctx: Context<ResumeMarket>) -> Result<()> {
         instructions::market::resume_market(ctx)
+    }
+
+    pub fn update_market_params(
+        ctx: Context<UpdateMarketParams>,
+        maintenance_margin_ratio: Option<u64>,
+        initial_margin_ratio: Option<u64>,
+        funding_interval: Option<i64>,
+        max_leverage: Option<u64>,
+    ) -> Result<()> {
+        instructions::market::update_market_params(
+            ctx,
+            maintenance_margin_ratio,
+            initial_margin_ratio,
+            funding_interval,
+            max_leverage,
+        )
     }
 
     pub fn create_margin_account(ctx: Context<CreateMarginAccount>, margin_type: MarginType, bump: u8) -> Result<()> {

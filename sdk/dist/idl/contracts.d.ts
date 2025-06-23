@@ -5,7 +5,7 @@
  * IDL can be found at `target/idl/contracts.json`.
  */
 export type Contracts = {
-    "address": "BSRWveJobC6xFCuo3wqwGGa4N1Kqcoc9r8H2AzCavvpg";
+    "address": "AjNFVGrgdphuxJ1oyHkzZKPDBusjd5uogbWH3NXTbzzG";
     "metadata": {
         "name": "contracts";
         "version": "0.1.0";
@@ -30,13 +30,8 @@ export type Contracts = {
                     "name": "market";
                     "writable": true;
                     "relations": [
-                        "order",
                         "position"
                     ];
-                },
-                {
-                    "name": "order";
-                    "writable": true;
                 },
                 {
                     "name": "position";
@@ -51,7 +46,6 @@ export type Contracts = {
                     "writable": true;
                     "signer": true;
                     "relations": [
-                        "order",
                         "position"
                     ];
                 },
@@ -322,13 +316,8 @@ export type Contracts = {
                     "name": "market";
                     "writable": true;
                     "relations": [
-                        "order",
                         "position"
                     ];
-                },
-                {
-                    "name": "order";
-                    "writable": true;
                 },
                 {
                     "name": "position";
@@ -392,36 +381,6 @@ export type Contracts = {
                 {
                     "name": "market";
                     "writable": true;
-                },
-                {
-                    "name": "order";
-                    "writable": true;
-                    "pda": {
-                        "seeds": [
-                            {
-                                "kind": "const";
-                                "value": [
-                                    111,
-                                    114,
-                                    100,
-                                    101,
-                                    114
-                                ];
-                            },
-                            {
-                                "kind": "account";
-                                "path": "market";
-                            },
-                            {
-                                "kind": "account";
-                                "path": "trader";
-                            },
-                            {
-                                "kind": "arg";
-                                "path": "uid";
-                            }
-                        ];
-                    };
                 },
                 {
                     "name": "position";
@@ -489,10 +448,6 @@ export type Contracts = {
                 {
                     "name": "leverage";
                     "type": "u64";
-                },
-                {
-                    "name": "orderBump";
-                    "type": "u8";
                 },
                 {
                     "name": "positionBump";
@@ -661,19 +616,6 @@ export type Contracts = {
                 227,
                 198,
                 154
-            ];
-        },
-        {
-            "name": "order";
-            "discriminator": [
-                134,
-                173,
-                223,
-                185,
-                77,
-                86,
-                28,
-                51
             ];
         },
         {
@@ -1204,12 +1146,6 @@ export type Contracts = {
                         "type": "u64";
                     },
                     {
-                        "name": "orders";
-                        "type": {
-                            "vec": "pubkey";
-                        };
-                    },
-                    {
                         "name": "positions";
                         "type": {
                             "vec": "pubkey";
@@ -1481,70 +1417,6 @@ export type Contracts = {
             };
         },
         {
-            "name": "order";
-            "type": {
-                "kind": "struct";
-                "fields": [
-                    {
-                        "name": "trader";
-                        "type": "pubkey";
-                    },
-                    {
-                        "name": "market";
-                        "type": "pubkey";
-                    },
-                    {
-                        "name": "side";
-                        "type": {
-                            "defined": {
-                                "name": "side";
-                            };
-                        };
-                    },
-                    {
-                        "name": "orderType";
-                        "type": {
-                            "defined": {
-                                "name": "orderType";
-                            };
-                        };
-                    },
-                    {
-                        "name": "price";
-                        "type": "u64";
-                    },
-                    {
-                        "name": "size";
-                        "type": "u64";
-                    },
-                    {
-                        "name": "filledSize";
-                        "type": "u64";
-                    },
-                    {
-                        "name": "leverage";
-                        "type": "u64";
-                    },
-                    {
-                        "name": "collateral";
-                        "type": "u64";
-                    },
-                    {
-                        "name": "createdAt";
-                        "type": "i64";
-                    },
-                    {
-                        "name": "isActive";
-                        "type": "bool";
-                    },
-                    {
-                        "name": "bump";
-                        "type": "u8";
-                    }
-                ];
-            };
-        },
-        {
             "name": "orderCancelledEvent";
             "type": {
                 "kind": "struct";
@@ -1574,7 +1446,7 @@ export type Contracts = {
                         "type": "pubkey";
                     },
                     {
-                        "name": "order";
+                        "name": "position";
                         "type": "pubkey";
                     },
                     {
@@ -1618,7 +1490,7 @@ export type Contracts = {
                         "type": "pubkey";
                     },
                     {
-                        "name": "order";
+                        "name": "position";
                         "type": "pubkey";
                     },
                     {
@@ -1666,16 +1538,10 @@ export type Contracts = {
                 "kind": "enum";
                 "variants": [
                     {
-                        "name": "limit";
-                    },
-                    {
                         "name": "market";
                     },
                     {
-                        "name": "stopLoss";
-                    },
-                    {
-                        "name": "takeProfit";
+                        "name": "limit";
                     }
                 ];
             };
@@ -1694,6 +1560,14 @@ export type Contracts = {
                         "type": "pubkey";
                     },
                     {
+                        "name": "orderType";
+                        "type": {
+                            "defined": {
+                                "name": "orderType";
+                            };
+                        };
+                    },
+                    {
                         "name": "side";
                         "type": {
                             "defined": {
@@ -1703,6 +1577,14 @@ export type Contracts = {
                     },
                     {
                         "name": "size";
+                        "type": "u64";
+                    },
+                    {
+                        "name": "filledSize";
+                        "type": "u64";
+                    },
+                    {
+                        "name": "price";
                         "type": "u64";
                     },
                     {
@@ -1734,12 +1616,12 @@ export type Contracts = {
                         "type": "i64";
                     },
                     {
-                        "name": "liquidationPrice";
-                        "type": "u64";
-                    },
-                    {
                         "name": "isOpen";
                         "type": "bool";
+                    },
+                    {
+                        "name": "createdAt";
+                        "type": "i64";
                     },
                     {
                         "name": "bump";
@@ -1822,8 +1704,12 @@ export type Contracts = {
                         "type": "pubkey";
                     },
                     {
-                        "name": "liquidator";
-                        "type": "pubkey";
+                        "name": "side";
+                        "type": {
+                            "defined": {
+                                "name": "side";
+                            };
+                        };
                     },
                     {
                         "name": "size";
@@ -1834,20 +1720,28 @@ export type Contracts = {
                         "type": "u64";
                     },
                     {
-                        "name": "liquidationPrice";
+                        "name": "entryPrice";
                         "type": "u64";
+                    },
+                    {
+                        "name": "exitPrice";
+                        "type": "u64";
+                    },
+                    {
+                        "name": "liquidator";
+                        "type": "pubkey";
                     },
                     {
                         "name": "liquidationFee";
                         "type": "u64";
                     },
                     {
-                        "name": "marginType";
-                        "type": {
-                            "defined": {
-                                "name": "marginType";
-                            };
-                        };
+                        "name": "liquidatorFee";
+                        "type": "u64";
+                    },
+                    {
+                        "name": "insuranceFundFee";
+                        "type": "u64";
                     }
                 ];
             };

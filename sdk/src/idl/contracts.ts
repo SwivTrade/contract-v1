@@ -5,7 +5,7 @@
  * IDL can be found at `target/idl/contracts.json`.
  */
 export type Contracts = {
-  "address": "AjNFVGrgdphuxJ1oyHkzZKPDBusjd5uogbWH3NXTbzzG",
+  "address": "9wdJq5R7VUuXDrAZBnXfDqc1vW6nwAW5aYneMKiryppz",
   "metadata": {
     "name": "contracts",
     "version": "0.1.0",
@@ -539,6 +539,58 @@ export type Contracts = {
         {
           "name": "newFundingRate",
           "type": "i64"
+        }
+      ]
+    },
+    {
+      "name": "updateMarketParams",
+      "discriminator": [
+        70,
+        117,
+        202,
+        191,
+        205,
+        174,
+        92,
+        82
+      ],
+      "accounts": [
+        {
+          "name": "market",
+          "writable": true
+        },
+        {
+          "name": "authority",
+          "signer": true,
+          "relations": [
+            "market"
+          ]
+        }
+      ],
+      "args": [
+        {
+          "name": "maintenanceMarginRatio",
+          "type": {
+            "option": "u64"
+          }
+        },
+        {
+          "name": "initialMarginRatio",
+          "type": {
+            "option": "u64"
+          }
+        },
+        {
+          "name": "fundingInterval",
+          "type": {
+            "option": "i64"
+          }
+        },
+        {
+          "name": "maxLeverage",
+          "type": {
+            "option": "u64"
+          }
         }
       ]
     },

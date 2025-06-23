@@ -52,6 +52,13 @@ pub fn place_market_order(
     require!(market.is_active, ErrorCode::MarketInactive);
     require!(leverage <= market.max_leverage, ErrorCode::LeverageTooHigh);
     require!(size > 0, ErrorCode::InvalidOrderSize);
+    
+    // Validate that leverage is compatible with initial margin ratio
+    // For leverage to work, we need: 1/leverage >= initial_margin_ratio/10000
+    // This ensures required collateral >= minimum margin
+    let max_allowed_leverage = 10000u64.checked_div(market.initial_margin_ratio)
+        .ok_or(ErrorCode::MathOverflow)?;
+    require!(leverage <= max_allowed_leverage, ErrorCode::LeverageTooHigh);
 
     // Get current price from oracle
     let oracle_data = ctx.accounts.price_update.try_borrow_data()?;

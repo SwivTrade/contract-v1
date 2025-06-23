@@ -19,12 +19,12 @@ describe("SOL-PERP Tests", () => {
   let keypair: Keypair;
 
   // Market setup
-  const marketSymbol = "SOL-PERP-TEST3";
+  const marketSymbol = "SOL-PERP-TEST4";
   const initialFundingRate = 0;
   const fundingInterval = 3600;
-  const maintenanceMarginRatio = 500; // 5%
-  const initialMarginRatio = 1000; // 10%
-  const maxLeverage = 10;
+  const maintenanceMarginRatio = 100; // 1% (changed from 500 to support higher leverage)
+  const initialMarginRatio = 200; // 2% (changed from 1000 to support up to 50x leverage)
+  const maxLeverage = 50; // Increased from 10 to 50
   const liquidationFeeRatio = 250; // 2.5%
 
   // PDAs and accounts
@@ -317,7 +317,7 @@ describe("SOL-PERP Tests", () => {
       // Place long market order with larger size
       const side = 'long';
       const size = new BN(100_000); // 0.1 tokens (doubled from before)
-      const leverage = new BN(5);
+      const leverage = new BN(50); // Changed from 5 to 50 to test higher leverage
       
       console.log('\nPlacing order with:');
       console.log('- Size:', size.toNumber() / 1_000_000, 'tokens');

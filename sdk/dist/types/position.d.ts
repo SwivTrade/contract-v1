@@ -1,10 +1,15 @@
 import { PublicKey } from '@solana/web3.js';
 import { BN } from '@coral-xyz/anchor';
+import { OrderType, Side } from './order';
+export type { Side };
 export interface Position {
     trader: PublicKey;
     market: PublicKey;
+    orderType: OrderType;
     side: Side;
     size: BN;
+    filledSize: BN;
+    price: BN;
     collateral: BN;
     entryPrice: BN;
     entryFundingRate: BN;
@@ -12,15 +17,10 @@ export interface Position {
     realizedPnl: BN;
     lastFundingPaymentTime: BN;
     lastCumulativeFunding: BN;
-    liquidationPrice: BN;
     isOpen: boolean;
+    createdAt: BN;
     bump: number;
 }
-export type Side = {
-    long: {};
-} | {
-    short: {};
-};
 export interface OpenPositionParams {
     market: PublicKey;
     marginAccount: PublicKey;

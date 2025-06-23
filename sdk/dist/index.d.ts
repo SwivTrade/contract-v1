@@ -3,7 +3,7 @@ import { PublicKey, Transaction, Keypair, Connection } from '@solana/web3.js';
 import type { Contracts } from "./idl/index";
 import { Market, InitializeMarketParams } from './types/market';
 import { MarginAccount, CreateMarginAccountParams, DepositCollateralParams, WithdrawCollateralParams } from './types/margin-account';
-import { Position } from './types/position';
+import { Position, Side } from './types/position';
 import { MockOracle } from "./idl/mock_oracle";
 import { Oracle, InitializeOracleParams, UpdateOracleParams } from './types/oracle';
 /**
@@ -77,12 +77,6 @@ export declare class PerpetualSwapSDK {
      */
     buildWithdrawCollateralTransaction(params: WithdrawCollateralParams, userPublicKey: PublicKey): Promise<Transaction>;
     /**
-     * Build a transaction to open a position
-     */
-    /**
-     * Build a transaction to close a position
-     */
-    /**
      * Get market details
      */
     getMarket(marketAddress: PublicKey): Promise<Market>;
@@ -114,8 +108,10 @@ export declare class PerpetualSwapSDK {
      * Get all markets from the program
      */
     getAllMarkets(): Promise<Market[]>;
+    /**
+     * Find the PDA for an order
+     */
     findOrderPda(market: PublicKey, trader: PublicKey, uid: number): Promise<[PublicKey, number]>;
-    getOrder(orderPda: PublicKey): Promise<any>;
     /**
      * Generate a unique ID for orders and positions
      * Uses timestamp and random number to ensure uniqueness
@@ -124,15 +120,11 @@ export declare class PerpetualSwapSDK {
     buildPlaceMarketOrderTransaction(params: {
         market: PublicKey;
         marginAccount: PublicKey;
-        side: {
-            long: {};
-        } | {
-            short: {};
-        };
+        side: Side;
         size: BN;
         leverage: BN;
         oracleAccount: PublicKey;
-    }, trader: PublicKey): Promise<Transaction>;
+    }, signer: PublicKey): Promise<Transaction>;
     buildPauseMarketTransaction(params: {
         market: PublicKey;
     }, authority: PublicKey): Promise<Transaction>;
@@ -141,14 +133,12 @@ export declare class PerpetualSwapSDK {
     }, authority: PublicKey): Promise<Transaction>;
     buildCloseMarketOrderTransaction(params: {
         market: PublicKey;
-        order: PublicKey;
         position: PublicKey;
         marginAccount: PublicKey;
         oracleAccount: PublicKey;
     }, signer: PublicKey): Promise<Transaction>;
     buildLiquidateMarketOrderTransaction(params: {
         market: PublicKey;
-        order: PublicKey;
         position: PublicKey;
         marginAccount: PublicKey;
         oracleAccount: PublicKey;

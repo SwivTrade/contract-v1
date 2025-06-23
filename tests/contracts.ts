@@ -18,12 +18,12 @@ describe("Contract Tests", () => {
   let keypair: Keypair;
 
   // Market setup
-  const marketSymbol = "t1-PERP";
+  const marketSymbol = "t2-PERP";
   const initialFundingRate = 0;
   const fundingInterval = 3600;
-  const maintenanceMarginRatio = 500; // 5%
-  const initialMarginRatio = 1000; // 10%
-  const maxLeverage = 10;
+  const maintenanceMarginRatio = 100; // 1% (changed from 500 to support higher leverage)
+  const initialMarginRatio = 200; // 2% (changed from 1000 to support up to 50x leverage)
+  const maxLeverage = 50; // Increased from 10 to 50
   const liquidationFeeRatio = 250; // 2.5%
 
   // PDAs and accounts
@@ -685,6 +685,92 @@ describe("Contract Tests", () => {
     // Verify market state
     const market = await sdk.getMarket(marketPda);
     assert.isTrue(market.insuranceFund.gt(new BN(0))); // Insurance fund should have received fees
+  });
+
+  it("Updates market parameters and reverts them", async () => {
+    // Get current market parameters
+    const marketBefore = await sdk.getMarket(marketPda);
+    console.log('\n=== MARKET PARAMETERS UPDATE TEST ===');
+    console.log('Original Market Parameters:');
+    console.log('- Maintenance Margin Ratio:', marketBefore.maintenanceMarginRatio.toNumber());
+    console.log('- Initial Margin Ratio:', marketBefore.initialMarginRatio.toNumber());
+    console.log('- Funding Interval:', marketBefore.fundingInterval.toNumber());
+    console.log('- Max Leverage:', marketBefore.maxLeverage.toNumber());
+
+    // Store original values for later restoration
+    const originalMaintenanceMargin = marketBefore.maintenanceMarginRatio.toNumber();
+    const originalInitialMargin = marketBefore.initialMarginRatio.toNumber();
+    const originalFundingInterval = marketBefore.fundingInterval.toNumber();
+    const originalMaxLeverage = marketBefore.maxLeverage.toNumber();
+
+    // Update market parameters to new values
+    const newMaintenanceMargin = 150; // 1.5%
+    const newInitialMargin = 300; // 3%
+    const newFundingInterval = 7200; // 2 hours
+    const newMaxLeverage = 25; // 25x leverage
+
+    console.log('\nUpdating Market Parameters to:');
+    console.log('- Maintenance Margin Ratio:', newMaintenanceMargin);
+    console.log('- Initial Margin Ratio:', newInitialMargin);
+    console.log('- Funding Interval:', newFundingInterval);
+    console.log('- Max Leverage:', newMaxLeverage);
+
+    const updateTx = await sdk.buildUpdateMarketParamsTransaction({
+      market: marketPda,
+      maintenanceMarginRatio: newMaintenanceMargin,
+      initialMarginRatio: newInitialMargin,
+      fundingInterval: newFundingInterval,
+      maxLeverage: newMaxLeverage
+    }, keypair.publicKey);
+
+    await provider.sendAndConfirm(updateTx);
+
+    // Verify the parameters were updated
+    const marketAfterUpdate = await sdk.getMarket(marketPda);
+    console.log('\nMarket Parameters After Update:');
+    console.log('- Maintenance Margin Ratio:', marketAfterUpdate.maintenanceMarginRatio.toNumber());
+    console.log('- Initial Margin Ratio:', marketAfterUpdate.initialMarginRatio.toNumber());
+    console.log('- Funding Interval:', marketAfterUpdate.fundingInterval.toNumber());
+    console.log('- Max Leverage:', marketAfterUpdate.maxLeverage.toNumber());
+
+    // Assert that parameters were updated correctly
+    assert.equal(marketAfterUpdate.maintenanceMarginRatio.toNumber(), newMaintenanceMargin);
+    assert.equal(marketAfterUpdate.initialMarginRatio.toNumber(), newInitialMargin);
+    assert.equal(marketAfterUpdate.fundingInterval.toNumber(), newFundingInterval);
+    assert.equal(marketAfterUpdate.maxLeverage.toNumber(), newMaxLeverage);
+
+    // Revert parameters back to original values
+    console.log('\nReverting Market Parameters to Original Values:');
+    console.log('- Maintenance Margin Ratio:', originalMaintenanceMargin);
+    console.log('- Initial Margin Ratio:', originalInitialMargin);
+    console.log('- Funding Interval:', originalFundingInterval);
+    console.log('- Max Leverage:', originalMaxLeverage);
+
+    const revertTx = await sdk.buildUpdateMarketParamsTransaction({
+      market: marketPda,
+      maintenanceMarginRatio: originalMaintenanceMargin,
+      initialMarginRatio: originalInitialMargin,
+      fundingInterval: originalFundingInterval,
+      maxLeverage: originalMaxLeverage
+    }, keypair.publicKey);
+
+    await provider.sendAndConfirm(revertTx);
+
+    // Verify the parameters were reverted
+    const marketAfterRevert = await sdk.getMarket(marketPda);
+    console.log('\nMarket Parameters After Revert:');
+    console.log('- Maintenance Margin Ratio:', marketAfterRevert.maintenanceMarginRatio.toNumber());
+    console.log('- Initial Margin Ratio:', marketAfterRevert.initialMarginRatio.toNumber());
+    console.log('- Funding Interval:', marketAfterRevert.fundingInterval.toNumber());
+    console.log('- Max Leverage:', marketAfterRevert.maxLeverage.toNumber());
+
+    // Assert that parameters were reverted correctly
+    assert.equal(marketAfterRevert.maintenanceMarginRatio.toNumber(), originalMaintenanceMargin);
+    assert.equal(marketAfterRevert.initialMarginRatio.toNumber(), originalInitialMargin);
+    assert.equal(marketAfterRevert.fundingInterval.toNumber(), originalFundingInterval);
+    assert.equal(marketAfterRevert.maxLeverage.toNumber(), originalMaxLeverage);
+
+    console.log('=== MARKET PARAMETERS UPDATE TEST COMPLETED ===\n');
   });
 
   beforeEach(async function() {
