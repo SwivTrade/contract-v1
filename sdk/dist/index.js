@@ -357,6 +357,16 @@ class PerpetualSwapSDK {
             .transaction();
         return tx;
     }
+    async buildUpdateMarketParamsTransaction(params, authority) {
+        const tx = await this.program.methods
+            .updateMarketParams(params.maintenanceMarginRatio ? new anchor_1.BN(params.maintenanceMarginRatio) : null, params.initialMarginRatio ? new anchor_1.BN(params.initialMarginRatio) : null, params.fundingInterval ? new anchor_1.BN(params.fundingInterval) : null, params.maxLeverage ? new anchor_1.BN(params.maxLeverage) : null)
+            .accountsStrict({
+            market: params.market,
+            authority,
+        })
+            .transaction();
+        return tx;
+    }
     async buildCloseMarketOrderTransaction(params, signer) {
         const tx = await this.program.methods
             .closeMarketOrder()

@@ -131,6 +131,13 @@ export declare class PerpetualSwapSDK {
     buildResumeMarketTransaction(params: {
         market: PublicKey;
     }, authority: PublicKey): Promise<Transaction>;
+    buildUpdateMarketParamsTransaction(params: {
+        market: PublicKey;
+        maintenanceMarginRatio?: number;
+        initialMarginRatio?: number;
+        fundingInterval?: number;
+        maxLeverage?: number;
+    }, authority: PublicKey): Promise<Transaction>;
     buildCloseMarketOrderTransaction(params: {
         market: PublicKey;
         position: PublicKey;

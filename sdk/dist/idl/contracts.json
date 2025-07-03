@@ -1,5 +1,5 @@
 {
-    "address": "AjNFVGrgdphuxJ1oyHkzZKPDBusjd5uogbWH3NXTbzzG",
+    "address": "9wdJq5R7VUuXDrAZBnXfDqc1vW6nwAW5aYneMKiryppz",
     "metadata": {
         "name": "contracts",
         "version": "0.1.0",
@@ -533,6 +533,58 @@
                 {
                     "name": "new_funding_rate",
                     "type": "i64"
+                }
+            ]
+        },
+        {
+            "name": "update_market_params",
+            "discriminator": [
+                70,
+                117,
+                202,
+                191,
+                205,
+                174,
+                92,
+                82
+            ],
+            "accounts": [
+                {
+                    "name": "market",
+                    "writable": true
+                },
+                {
+                    "name": "authority",
+                    "signer": true,
+                    "relations": [
+                        "market"
+                    ]
+                }
+            ],
+            "args": [
+                {
+                    "name": "maintenance_margin_ratio",
+                    "type": {
+                        "option": "u64"
+                    }
+                },
+                {
+                    "name": "initial_margin_ratio",
+                    "type": {
+                        "option": "u64"
+                    }
+                },
+                {
+                    "name": "funding_interval",
+                    "type": {
+                        "option": "i64"
+                    }
+                },
+                {
+                    "name": "max_leverage",
+                    "type": {
+                        "option": "u64"
+                    }
                 }
             ]
         },
