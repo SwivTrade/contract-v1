@@ -161,7 +161,7 @@ describe("Contract Tests", () => {
         tokenMint,
         userTokenAccount,
         mintAuthority,
-        100_000_000 // 100 tokens
+        1_000_000_000 // 1,000,000,000 tokens (much larger for very large orders)
       );
       console.log('Tokens minted successfully');
     } else {
@@ -169,9 +169,9 @@ describe("Contract Tests", () => {
       const balance = await connection.getTokenAccountBalance(userTokenAccount);
       const currentAmount = balance.value.uiAmount || 0;
       
-      if (currentAmount < 100) {
+      if (currentAmount < 1000000000) {
         console.log(`Current balance: ${currentAmount} tokens, minting more...`);
-        const amountToMint = (100 - currentAmount) * 1_000_000;
+        const amountToMint = Math.floor((1000000000 - currentAmount) * 1_000_000);
         await mintTo(
           connection,
           keypair,
@@ -180,7 +180,7 @@ describe("Contract Tests", () => {
           mintAuthority,
           amountToMint
         );
-        console.log(`Minted ${(100 - currentAmount)} more tokens`);
+        console.log(`Minted ${(1000000000 - currentAmount)} more tokens`);
       } else {
         console.log(`Sufficient token balance: ${currentAmount} tokens`);
       }
@@ -272,7 +272,7 @@ describe("Contract Tests", () => {
   });
 
   it("Deposits collateral", async () => {
-    const amount = new BN(50_000_000); // 50 tokens
+    const amount = new BN(100_000_000 * 1_000_000); // 100,000,000 tokens scaled to 6 decimals
     
     // Get current balance
     const marginAccountBefore = await sdk.getMarginAccount(keypair.publicKey, marketPda);
@@ -302,7 +302,7 @@ describe("Contract Tests", () => {
   });
 
   it("Withdraws collateral", async () => {
-    const amount = new BN(10_000_000); // 10 tokens
+    const amount = new BN(20_000_000 * 1_000_000); // 20,000,000 tokens scaled to 6 decimals
     
     // Get current balances
     const marginAccountBefore = await sdk.getMarginAccount(keypair.publicKey, marketPda);
@@ -332,18 +332,18 @@ describe("Contract Tests", () => {
   });
 
   it("Opens and closes a long market order with profit", async () => {
-    // Place long market order
+    // Place long market order with very large size
     const side = 'long';
-    const size = new BN(50_000); // 0.05 tokens
+    const size = new BN(5_000_000); // 5,000,000 tokens (very large size)
     const leverage = new BN(5);
     
     // Log margin account state before placing order
     const marginAccountBefore = await sdk.getMarginAccount(keypair.publicKey, marketPda);
     console.log('\n=== COLLATERAL TRACKING ===');
     console.log('Before Placing Order:');
-    console.log('- Collateral:', marginAccountBefore.collateral.toNumber() / 1_000_000, 'tokens');
-    console.log('- Allocated Margin:', marginAccountBefore.allocatedMargin.toNumber() / 1_000_000, 'tokens');
-    console.log('- Available Margin:', (marginAccountBefore.collateral.toNumber() - marginAccountBefore.allocatedMargin.toNumber()) / 1_000_000, 'tokens');
+    console.log('- Collateral:', marginAccountBefore.collateral.toNumber(), 'tokens');
+    console.log('- Allocated Margin:', marginAccountBefore.allocatedMargin.toNumber(), 'tokens');
+    console.log('- Available Margin:', (marginAccountBefore.collateral.toNumber() - marginAccountBefore.allocatedMargin.toNumber()), 'tokens');
     
     const placeOrderTx = await sdk.buildPlaceMarketOrderTransaction({
       market: marketPda,
@@ -416,9 +416,9 @@ describe("Contract Tests", () => {
   });
 
   it("Opens and closes a short market order with profit", async () => {
-    // Place short market order
+    // Place short market order with very large size
     const side = 'short';
-    const size = new BN(50_000); // 0.05 tokens
+    const size = new BN(6_000_000); // 6,000,000 tokens (very large size)
     const leverage = new BN(5);
     
     const placeOrderTx = await sdk.buildPlaceMarketOrderTransaction({
@@ -491,9 +491,9 @@ describe("Contract Tests", () => {
   });
 
   it("Opens and closes a long market order with loss", async () => {
-    // Place long market order
+    // Place long market order with very large size
     const side = 'long';
-    const size = new BN(50_000); // 0.05 tokens
+    const size = new BN(7_000_000); // 7,000,000 tokens (very large size)
     const leverage = new BN(5);
     
     const placeOrderTx = await sdk.buildPlaceMarketOrderTransaction({
@@ -543,9 +543,9 @@ describe("Contract Tests", () => {
   });
 
   it("Opens and closes a short market order with loss", async () => {
-    // Place short market order
+    // Place short market order with very large size
     const side = 'short';
-    const size = new BN(50_000); // 0.05 tokens
+    const size = new BN(8_000_000); // 8,000,000 tokens (very large size)
     const leverage = new BN(5);
     
     const placeOrderTx = await sdk.buildPlaceMarketOrderTransaction({
@@ -594,10 +594,289 @@ describe("Contract Tests", () => {
     }
   });
 
+  it("Tests consecutive open and close operations to verify margin accounting", async () => {
+    console.log('\n=== CONSECUTIVE ORDER TEST ===');
+    
+    // Get initial margin account state
+    const initialMarginAccount = await sdk.getMarginAccount(keypair.publicKey, marketPda);
+    console.log('\nInitial State:');
+    console.log('- Collateral:', initialMarginAccount.collateral.toNumber() / 1_000_000, 'tokens');
+    console.log('- Allocated Margin:', initialMarginAccount.allocatedMargin.toNumber() / 1_000_000, 'tokens');
+    console.log('- Available Margin:', (initialMarginAccount.collateral.toNumber() - initialMarginAccount.allocatedMargin.toNumber()) / 1_000_000, 'tokens');
+    console.log('- Positions:', initialMarginAccount.positions.length);
+
+    // Test 1: Open and close a long position with profit
+    console.log('\n--- TEST 1: Long Position with Profit ---');
+    
+    // Place long order with very large size
+    const side1 = 'long';
+    const size1 = new BN(5_000_000); // 5,000,000 tokens (very large size)
+    const leverage1 = new BN(5);
+    
+    console.log('Placing long order:', {
+      size: size1.toNumber(),
+      leverage: leverage1.toNumber(),
+      side: side1
+    });
+    
+    const placeOrderTx1 = await sdk.buildPlaceMarketOrderTransaction({
+      market: marketPda,
+      marginAccount: marginAccountPda,
+      side: side1,
+      size: size1,
+      leverage: leverage1,
+      oracleAccount: mockOraclePda
+    }, keypair.publicKey);
+
+    await provider.sendAndConfirm(placeOrderTx1);
+
+    // Get position and margin account after placing order
+    const marginAccountAfterOrder1 = await sdk.getMarginAccount(keypair.publicKey, marketPda);
+    const positionPda1 = marginAccountAfterOrder1.positions[0];
+    const position1 = await sdk.getPosition(positionPda1);
+    
+    console.log('After placing order:');
+    console.log('- Collateral:', marginAccountAfterOrder1.collateral.toNumber() / 1_000_000, 'tokens');
+    console.log('- Allocated Margin:', marginAccountAfterOrder1.allocatedMargin.toNumber() / 1_000_000, 'tokens');
+    console.log('- Available Margin:', (marginAccountAfterOrder1.collateral.toNumber() - marginAccountAfterOrder1.allocatedMargin.toNumber()) / 1_000_000, 'tokens');
+    console.log('- Position Size:', position1.size.toNumber(), 'tokens');
+    console.log('- Position Entry Price:', position1.entryPrice.toNumber());
+
+    // Update oracle price for profit
+    const profitPrice1 = 1200; // 20% profit
+    await sdk.updateOraclePrice({
+      marketSymbol,
+      newPrice: profitPrice1
+    });
+    console.log('Updated oracle price to:', profitPrice1, 'for profit');
+
+    // Close position
+    const closeOrderTx1 = await sdk.buildCloseMarketOrderTransaction({
+      market: marketPda,
+      position: positionPda1,
+      marginAccount: marginAccountPda,
+      oracleAccount: mockOraclePda
+    }, keypair.publicKey);
+
+    await provider.sendAndConfirm(closeOrderTx1);
+
+    // Get margin account after closing
+    const marginAccountAfterClose1 = await sdk.getMarginAccount(keypair.publicKey, marketPda);
+    console.log('After closing order:');
+    console.log('- Collateral:', marginAccountAfterClose1.collateral.toNumber() / 1_000_000, 'tokens');
+    console.log('- Allocated Margin:', marginAccountAfterClose1.allocatedMargin.toNumber() / 1_000_000, 'tokens');
+    console.log('- Available Margin:', (marginAccountAfterClose1.collateral.toNumber() - marginAccountAfterClose1.allocatedMargin.toNumber()) / 1_000_000, 'tokens');
+    console.log('- Positions:', marginAccountAfterClose1.positions.length);
+
+    // Verify position is closed
+    assert.equal(marginAccountAfterClose1.positions.length, 0);
+    assert.equal(marginAccountAfterClose1.allocatedMargin.toNumber(), 0);
+
+    // Test 2: Open and close a short position with profit
+    console.log('\n--- TEST 2: Short Position with Profit ---');
+    
+    // Place short order with realistic size
+    const side2 = 'short';
+    const size2 = new BN(6_000_000); // 6,000,000 tokens (realistic size)
+    const leverage2 = new BN(4);
+    
+    console.log('Placing short order:', {
+      size: size2.toNumber(),
+      leverage: leverage2.toNumber(),
+      side: side2
+    });
+    
+    const placeOrderTx2 = await sdk.buildPlaceMarketOrderTransaction({
+      market: marketPda,
+      marginAccount: marginAccountPda,
+      side: side2,
+      size: size2,
+      leverage: leverage2,
+      oracleAccount: mockOraclePda
+    }, keypair.publicKey);
+
+    await provider.sendAndConfirm(placeOrderTx2);
+
+    // Get position and margin account after placing order
+    const marginAccountAfterOrder2 = await sdk.getMarginAccount(keypair.publicKey, marketPda);
+    const positionPda2 = marginAccountAfterOrder2.positions[0];
+    const position2 = await sdk.getPosition(positionPda2);
+    
+    console.log('After placing order:');
+    console.log('- Collateral:', marginAccountAfterOrder2.collateral.toNumber() / 1_000_000, 'tokens');
+    console.log('- Allocated Margin:', marginAccountAfterOrder2.allocatedMargin.toNumber() / 1_000_000, 'tokens');
+    console.log('- Available Margin:', (marginAccountAfterOrder2.collateral.toNumber() - marginAccountAfterOrder2.allocatedMargin.toNumber()) / 1_000_000, 'tokens');
+    console.log('- Position Size:', position2.size.toNumber(), 'tokens');
+    console.log('- Position Entry Price:', position2.entryPrice.toNumber());
+
+    // Update oracle price for profit (lower price for short)
+    const profitPrice2 = 900; // 10% profit for short
+    await sdk.updateOraclePrice({
+      marketSymbol,
+      newPrice: profitPrice2
+    });
+    console.log('Updated oracle price to:', profitPrice2, 'for short profit');
+
+    // Close position
+    const closeOrderTx2 = await sdk.buildCloseMarketOrderTransaction({
+      market: marketPda,
+      position: positionPda2,
+      marginAccount: marginAccountPda,
+      oracleAccount: mockOraclePda
+    }, keypair.publicKey);
+
+    await provider.sendAndConfirm(closeOrderTx2);
+
+    // Get margin account after closing
+    const marginAccountAfterClose2 = await sdk.getMarginAccount(keypair.publicKey, marketPda);
+    console.log('After closing order:');
+    console.log('- Collateral:', marginAccountAfterClose2.collateral.toNumber() / 1_000_000, 'tokens');
+    console.log('- Allocated Margin:', marginAccountAfterClose2.allocatedMargin.toNumber() / 1_000_000, 'tokens');
+    console.log('- Available Margin:', (marginAccountAfterClose2.collateral.toNumber() - marginAccountAfterClose2.allocatedMargin.toNumber()) / 1_000_000, 'tokens');
+    console.log('- Positions:', marginAccountAfterClose2.positions.length);
+
+    // Verify position is closed
+    assert.equal(marginAccountAfterClose2.positions.length, 0);
+    assert.equal(marginAccountAfterClose2.allocatedMargin.toNumber(), 0);
+
+    // Test 3: Open and close a long position with loss
+    console.log('\n--- TEST 3: Long Position with Loss ---');
+    
+    // Place long order with realistic size
+    const side3 = 'long';
+    const size3 = new BN(7_000_000); // 7,000,000 tokens (realistic size)
+    const leverage3 = new BN(3);
+    
+    console.log('Placing long order:', {
+      size: size3.toNumber(),
+      leverage: leverage3.toNumber(),
+      side: side3
+    });
+    
+    const placeOrderTx3 = await sdk.buildPlaceMarketOrderTransaction({
+      market: marketPda,
+      marginAccount: marginAccountPda,
+      side: side3,
+      size: size3,
+      leverage: leverage3,
+      oracleAccount: mockOraclePda
+    }, keypair.publicKey);
+
+    await provider.sendAndConfirm(placeOrderTx3);
+
+    // Get position and margin account after placing order
+    const marginAccountAfterOrder3 = await sdk.getMarginAccount(keypair.publicKey, marketPda);
+    const positionPda3 = marginAccountAfterOrder3.positions[0];
+    const position3 = await sdk.getPosition(positionPda3);
+    
+    console.log('After placing order:');
+    console.log('- Collateral:', marginAccountAfterOrder3.collateral.toNumber() / 1_000_000, 'tokens');
+    console.log('- Allocated Margin:', marginAccountAfterOrder3.allocatedMargin.toNumber() / 1_000_000, 'tokens');
+    console.log('- Available Margin:', (marginAccountAfterOrder3.collateral.toNumber() - marginAccountAfterOrder3.allocatedMargin.toNumber()) / 1_000_000, 'tokens');
+    console.log('- Position Size:', position3.size.toNumber(), 'tokens');
+    console.log('- Position Entry Price:', position3.entryPrice.toNumber());
+
+    // Update oracle price for loss
+    const lossPrice3 = 800; // 20% loss
+    await sdk.updateOraclePrice({
+      marketSymbol,
+      newPrice: lossPrice3
+    });
+    console.log('Updated oracle price to:', lossPrice3, 'for loss');
+
+    // Close position
+    const closeOrderTx3 = await sdk.buildCloseMarketOrderTransaction({
+      market: marketPda,
+      position: positionPda3,
+      marginAccount: marginAccountPda,
+      oracleAccount: mockOraclePda
+    }, keypair.publicKey);
+
+    await provider.sendAndConfirm(closeOrderTx3);
+
+    // Get margin account after closing
+    const marginAccountAfterClose3 = await sdk.getMarginAccount(keypair.publicKey, marketPda);
+    console.log('After closing order:');
+    console.log('- Collateral:', marginAccountAfterClose3.collateral.toNumber() / 1_000_000, 'tokens');
+    console.log('- Allocated Margin:', marginAccountAfterClose3.allocatedMargin.toNumber() / 1_000_000, 'tokens');
+    console.log('- Available Margin:', (marginAccountAfterClose3.collateral.toNumber() - marginAccountAfterClose3.allocatedMargin.toNumber()) / 1_000_000, 'tokens');
+    console.log('- Positions:', marginAccountAfterClose3.positions.length);
+
+    // Verify position is closed
+    assert.equal(marginAccountAfterClose3.positions.length, 0);
+    assert.equal(marginAccountAfterClose3.allocatedMargin.toNumber(), 0);
+
+    // Test 4: Try to place another order to verify margin is available
+    console.log('\n--- TEST 4: Verify Margin Available for New Order ---');
+    
+    // Try to place a new order with realistic size
+    const side4 = 'long';
+    const size4 = new BN(8_000_000); // 8,000,000 tokens (realistic size)
+    const leverage4 = new BN(2);
+    
+    console.log('Attempting to place new order:', {
+      size: size4.toNumber(),
+      leverage: leverage4.toNumber(),
+      side: side4
+    });
+    
+    const placeOrderTx4 = await sdk.buildPlaceMarketOrderTransaction({
+      market: marketPda,
+      marginAccount: marginAccountPda,
+      side: side4,
+      size: size4,
+      leverage: leverage4,
+      oracleAccount: mockOraclePda
+    }, keypair.publicKey);
+
+    await provider.sendAndConfirm(placeOrderTx4);
+
+    // Get final margin account state
+    const finalMarginAccount = await sdk.getMarginAccount(keypair.publicKey, marketPda);
+    const finalPositionPda = finalMarginAccount.positions[0];
+    const finalPosition = await sdk.getPosition(finalPositionPda);
+    
+    console.log('Final state after placing new order:');
+    console.log('- Collateral:', finalMarginAccount.collateral.toNumber() / 1_000_000, 'tokens');
+    console.log('- Allocated Margin:', finalMarginAccount.allocatedMargin.toNumber() / 1_000_000, 'tokens');
+    console.log('- Available Margin:', (finalMarginAccount.collateral.toNumber() - finalMarginAccount.allocatedMargin.toNumber()) / 1_000_000, 'tokens');
+    console.log('- Positions:', finalMarginAccount.positions.length);
+    console.log('- Final Position Size:', finalPosition.size.toNumber(), 'tokens');
+
+    // Verify the new order was placed successfully
+    assert.equal(finalMarginAccount.positions.length, 1);
+    assert.isTrue(finalMarginAccount.allocatedMargin.gt(new BN(0)));
+
+    // Close the final position to clean up
+    console.log('\nClosing final position to clean up...');
+    const closeFinalTx = await sdk.buildCloseMarketOrderTransaction({
+      market: marketPda,
+      position: finalPositionPda,
+      marginAccount: marginAccountPda,
+      oracleAccount: mockOraclePda
+    }, keypair.publicKey);
+
+    await provider.sendAndConfirm(closeFinalTx);
+
+    // Verify final cleanup
+    const finalCleanupMargin = await sdk.getMarginAccount(keypair.publicKey, marketPda);
+    console.log('After final cleanup:');
+    console.log('- Collateral:', finalCleanupMargin.collateral.toNumber() / 1_000_000, 'tokens');
+    console.log('- Allocated Margin:', finalCleanupMargin.allocatedMargin.toNumber() / 1_000_000, 'tokens');
+    console.log('- Available Margin:', (finalCleanupMargin.collateral.toNumber() - finalCleanupMargin.allocatedMargin.toNumber()) / 1_000_000, 'tokens');
+    console.log('- Positions:', finalCleanupMargin.positions.length);
+
+    assert.equal(finalCleanupMargin.positions.length, 0);
+    assert.equal(finalCleanupMargin.allocatedMargin.toNumber(), 0);
+
+    console.log('\n=== CONSECUTIVE ORDER TEST COMPLETED SUCCESSFULLY ===');
+  });
+
+
   it("Liquidates a market order when position becomes undercollateralized", async () => {
-    // Place long market order with high leverage
+    // Place long market order with high leverage and very large size
     const side = 'long';
-    const size = new BN(100_000); // 0.1 tokens
+    const size = new BN(10_000_000); // 10,000,000 tokens (very large size)
     const leverage = new BN(10); // High leverage
     
     // Log margin account state before placing order
@@ -686,6 +965,7 @@ describe("Contract Tests", () => {
     const market = await sdk.getMarket(marketPda);
     assert.isTrue(market.insuranceFund.gt(new BN(0))); // Insurance fund should have received fees
   });
+
 
   it("Updates market parameters and reverts them", async () => {
     // Get current market parameters
@@ -825,10 +1105,10 @@ describe("Contract Tests", () => {
       console.log('Error during cleanup:', error.message);
     }
     
-    // Reset margin account collateral to a known state (40 tokens)
+    // Reset margin account collateral to a known state (very large amount for very large orders)
     try {
       const marginAccount = await sdk.getMarginAccount(keypair.publicKey, marketPda);
-      const targetCollateral = 40_000_000; // 40 tokens
+      const targetCollateral = 500_000_000 * 1_000_000; // 500,000,000 tokens scaled to 6 decimals
       const currentCollateral = marginAccount.collateral.toNumber();
       
       if (currentCollateral > targetCollateral) {

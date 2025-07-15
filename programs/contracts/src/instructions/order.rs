@@ -65,17 +65,9 @@ pub fn place_market_order(
     let oracle = Oracle::try_deserialize(&mut oracle_data.as_ref())?;
     let current_price = oracle.price;
 
-    // Calculate required collateral
-    // Scale price by 1e6 to match token decimals
-    let scaled_price = current_price
-        .checked_mul(1_000_000)
-        .ok_or(ErrorCode::MathOverflow)?;
-
-    // Calculate position value with proper decimal handling
+    // SIMPLE CALCULATION - No scaling
     let position_value = size
-        .checked_mul(scaled_price)
-        .ok_or(ErrorCode::MathOverflow)?
-        .checked_div(1_000_000)  // Divide by 1e6 to get back to token decimals
+        .checked_mul(current_price)
         .ok_or(ErrorCode::MathOverflow)?;
 
     let required_collateral = position_value
@@ -96,6 +88,13 @@ pub fn place_market_order(
         MarginType::Isolated => {
             // For isolated margin, check if there's enough available margin
             let available_margin = margin_account.available_margin()?;
+            msg!("Available margin: {}", available_margin);
+            msg!("Required collateral: {}", required_collateral);
+            msg!("Initial margin ratio: {}", market.initial_margin_ratio);
+            msg!("Maintenance margin ratio: {}", market.maintenance_margin_ratio);  
+            msg!("Position value: {}", position_value);
+            msg!("Required collateral: {}", required_collateral);
+            msg!("Min required margin: {}", min_required_margin);
             require!(available_margin >= required_collateral, ErrorCode::InsufficientMargin);
             
             // Allocate margin to this position

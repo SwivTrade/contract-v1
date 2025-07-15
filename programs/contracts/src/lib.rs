@@ -11,7 +11,7 @@ use instructions::*;
 use state::*;
 
 
-declare_id!("9wdJq5R7VUuXDrAZBnXfDqc1vW6nwAW5aYneMKiryppz");
+declare_id!("6UnAEvz8tLBLXM2uDmbYWYKZ6UuAgdxJHTss8HC9h3wf");
 
 #[program]
 pub mod contracts {
