@@ -29,9 +29,9 @@ const market = await sdk.initializeMarket({
   marketSymbol: 'SOL-PERP',
   initialFundingRate: 0,
   fundingInterval: 3600,
-  maintenanceMarginRatio: 500, // 5%
-  initialMarginRatio: 1000, // 10%
-  maxLeverage: 10,
+  maintenanceMarginRatio: 100, // 1%
+  initialMarginRatio: 200, // 2%
+  maxLeverage: 50, // 50x leverage
   oracleAccount: new PublicKey('your-oracle-account'),
   mint: new PublicKey('your-token-mint')
 });
@@ -51,25 +51,77 @@ const marketDetails = await sdk.getMarket(market.authority);
 const allMarkets = await sdk.getAllMarkets();
 console.log('Available markets:', allMarkets.map(m => m.marketSymbol));
 
-// Create a margin account
+// Create a global margin account (used across all markets)
 const marginAccount = await sdk.createMarginAccount({
-  market: market.authority,
+  marginType: { isolated: {} }, // or { cross: {} }
   bump: 0 // This will be calculated
 });
 
-// Deposit collateral
+// Deposit collateral to the global margin account
 await sdk.depositCollateral({
   marginAccount: marginAccount,
-  market: market.authority,
+  market: market.authority, // Specify which market's vault to use
   amount: new BN(1000000) // 1 token with 6 decimals
 });
 
-// Withdraw collateral
+// Withdraw collateral from the global margin account
 await sdk.withdrawCollateral({
   marginAccount: marginAccount,
-  market: market.authority,
+  market: market.authority, // Specify which market's vault to use
   amount: new BN(500000) // 0.5 token with 6 decimals
 });
+
+// Place orders using the global margin account
+const orderTx = await sdk.buildPlaceMarketOrderTransaction({
+  market: market.authority,
+  marginAccount: marginAccount,
+  side: 'long',
+  size: new BN(1000), // 1000 tokens
+  leverage: new BN(5), // 5x leverage
+  oracleAccount: new PublicKey('your-oracle-account')
+}, wallet.publicKey);
+
+// Close positions
+const closeTx = await sdk.buildCloseMarketOrderTransaction({
+  market: market.authority,
+  position: positionPda,
+  marginAccount: marginAccount,
+  oracleAccount: new PublicKey('your-oracle-account')
+}, wallet.publicKey);
+```
+
+## Key Changes in Global Margin Account Architecture
+
+### What Changed
+
+The SDK now uses a **global margin account system** instead of market-specific margin accounts:
+
+- **Before**: Each market had its own margin account (`market + user` PDA)
+- **Now**: Single global margin account per user (`user` PDA only)
+
+### Benefits
+
+1. **Better Capital Efficiency**: Collateral can be shared across all markets
+2. **Simplified UX**: Users don't need to create separate margin accounts for each market
+3. **Cross-Market Trading**: Users can trade on multiple markets with the same collateral
+4. **Reduced Account Creation**: Only one margin account needed per user
+
+### Migration Guide
+
+If you're upgrading from the previous version:
+
+```typescript
+// OLD: Market-specific margin account
+const [oldMarginAccountPda] = await sdk.findMarginAccountPda(userKey, marketKey);
+
+// NEW: Global margin account
+const [newMarginAccountPda] = await sdk.findMarginAccountPda(userKey);
+
+// OLD: Create margin account for specific market
+await sdk.createMarginAccount({ market: marketKey, marginType: { isolated: {} } });
+
+// NEW: Create global margin account
+await sdk.createMarginAccount({ marginType: { isolated: {} } });
 ```
 
 ## API Reference
@@ -89,10 +141,12 @@ constructor(connection: Connection, wallet: Wallet)
 - `initializeMarket(params: InitializeMarketParams): Promise<Market>` - Returns the complete market object
 - `getMarket(marketAddress: PublicKey): Promise<Market>`
 - `getAllMarkets(): Promise<Market[]>` - Returns all markets in the program
-- `createMarginAccount(params: CreateMarginAccountParams): Promise<PublicKey>`
-- `getMarginAccount(marginAccountAddress: PublicKey): Promise<MarginAccount>`
-- `depositCollateral(params: DepositCollateralParams): Promise<void>`
-- `withdrawCollateral(params: WithdrawCollateralParams): Promise<void>`
+- `createMarginAccount(params: CreateMarginAccountParams): Promise<PublicKey>` - Creates global margin account
+- `getMarginAccount(userPublicKey: PublicKey): Promise<MarginAccount>` - Gets global margin account for user
+- `depositCollateral(params: DepositCollateralParams): Promise<void>` - Deposits to global margin account
+- `withdrawCollateral(params: WithdrawCollateralParams): Promise<void>` - Withdraws from global margin account
+- `buildPlaceMarketOrderTransaction(params, userPublicKey): Promise<Transaction>` - Builds order transaction
+- `buildCloseMarketOrderTransaction(params, userPublicKey): Promise<Transaction>` - Builds close transaction
 
 ### Market Object
 
@@ -113,6 +167,63 @@ interface Market {
   vault: PublicKey;
 }
 ```
+
+### Global Margin Account Object
+
+The global margin account contains:
+
+```typescript
+interface MarginAccount {
+  owner: PublicKey;
+  marginType: { isolated: {} } | { cross: {} };
+  collateral: BN;
+  allocatedMargin: BN;
+  positions: PublicKey[]; // Positions across all markets
+  bump: number;
+}
+```
+
+## Multi-Network Support
+
+The SDK supports multiple Solana networks:
+
+```typescript
+import { PerpetualSwapSDK, Network } from '@swiv-sdk/perpetual-swap-sdk';
+
+// Create SDK for specific network
+const sonicSdk = PerpetualSwapSDK.createForNetwork(Network.SONIC_TESTNET);
+const devnetSdk = PerpetualSwapSDK.createForNetwork(Network.SOLANA_DEVNET);
+
+// Or initialize manually
+const sdk = new PerpetualSwapSDK(connection, wallet, Network.SONIC_TESTNET);
+```
+
+## Troubleshooting
+
+### Common Errors
+
+1. **"Account not initialised caused by account position"**
+   - This occurs when trying to close a position that's already been closed
+   - Use `safeClosePosition()` method for robust position closing
+   - Check if position exists before closing
+
+2. **"InsufficientMargin"**
+   - Ensure you have enough collateral in your global margin account
+   - Check leverage requirements for the market
+   - Verify position size doesn't exceed available margin
+
+3. **"insufficient funds" during withdrawal**
+   - Ensure the market vault has enough tokens
+   - Check that you're not withdrawing more than your collateral
+   - Verify the correct market vault is being used
+
+### Best Practices
+
+1. **Always check margin account state** before placing orders
+2. **Use isolated margin** for better risk management
+3. **Monitor position sizes** to avoid liquidation
+4. **Clean up positions** in tests using `beforeEach` hooks
+5. **Handle network-specific program IDs** correctly
 
 ## License
 
