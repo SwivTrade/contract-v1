@@ -162,7 +162,6 @@ pub struct CollateralWithdrawn {
 pub struct MarginAccountCreated {
     pub owner: Pubkey,
     pub margin_account: Pubkey,
-    pub market: Pubkey,
     pub margin_type: MarginType,
     pub timestamp: i64,
 }

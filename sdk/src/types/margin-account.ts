@@ -3,7 +3,6 @@ import { BN } from '@coral-xyz/anchor';
 
 export interface MarginAccount {
   owner: PublicKey;
-  perpMarket: PublicKey;
   marginType: { isolated: {} } | { cross: {} };
   collateral: BN;
   allocatedMargin: BN;
@@ -13,8 +12,8 @@ export interface MarginAccount {
 }
 
 export interface CreateMarginAccountParams {
+  // Remove market parameter - margin account is now global
   marginType: { isolated: {} } | { cross: {} };
-  market: PublicKey;
 }
 
 export interface DepositCollateralParams {

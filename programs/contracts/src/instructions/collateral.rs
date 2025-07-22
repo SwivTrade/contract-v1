@@ -123,7 +123,6 @@ pub fn withdraw_collateral<'info>(
 pub fn create_margin_account(ctx: Context<CreateMarginAccount>, margin_type: MarginType, bump: u8) -> Result<()> {
     let margin_account = &mut ctx.accounts.margin_account;
     margin_account.owner = ctx.accounts.owner.key();
-    margin_account.perp_market = ctx.accounts.market.key();
     margin_account.margin_type = margin_type;
     margin_account.collateral = 0;
     margin_account.allocated_margin = 0;
@@ -133,7 +132,6 @@ pub fn create_margin_account(ctx: Context<CreateMarginAccount>, margin_type: Mar
     emit!(MarginAccountCreated {
         owner: ctx.accounts.owner.key(),
         margin_account: margin_account.key(),
-        market: ctx.accounts.market.key(),
         margin_type,
         timestamp: Clock::get()?.unix_timestamp,
     });
@@ -175,7 +173,6 @@ pub struct DepositCollateral<'info> {
     #[account(
         mut,
         constraint = margin_account.owner == owner.key() @ ErrorCode::Unauthorized,
-        constraint = margin_account.perp_market == market.key() @ ErrorCode::InvalidParameter,
     )]
     pub margin_account: Account<'info, MarginAccount>,
     #[account(constraint = market.is_active @ ErrorCode::MarketInactive)]
@@ -201,8 +198,7 @@ pub struct WithdrawCollateral<'info> {
     pub owner: Signer<'info>,
     #[account(
         mut,
-        constraint = margin_account.owner == owner.key() @ ErrorCode::Unauthorized,
-        constraint = margin_account.perp_market == market.key() @ ErrorCode::InvalidParameter,
+        constraint = margin_account.owner == owner.key() @ ErrorCode::Unauthorized, 
     )]
     pub margin_account: Account<'info, MarginAccount>,
     #[account(constraint = market.is_active @ ErrorCode::MarketInactive)]
@@ -231,10 +227,10 @@ pub struct CreateMarginAccount<'info> {
         init,
         payer = owner,
         space = MarginAccount::SPACE,
-        seeds = [b"margin_account", owner.key().as_ref(), market.key().as_ref()],
+        seeds = [b"margin_account", owner.key().as_ref()],
         bump,
     )]
     pub margin_account: Account<'info, MarginAccount>,
-    pub market: Account<'info, Market>,
+
     pub system_program: Program<'info, System>,
 }

@@ -18,7 +18,7 @@ describe("Contract Tests", () => {
   let keypair: Keypair;
 
   // Market setup
-  const marketSymbol = "t2-PERP";
+  const marketSymbol = "t4-PERP";
   const initialFundingRate = 0;
   const fundingInterval = 3600;
   const maintenanceMarginRatio = 100; // 1% (changed from 500 to support higher leverage)
@@ -190,8 +190,7 @@ describe("Contract Tests", () => {
     [marketPda, marketBump] = await sdk.findMarketPda(marketSymbol);
     [marketVaultPda] = await sdk.findMarketVaultPda(marketPda);
     [marginAccountPda, marginAccountBump] = await sdk.findMarginAccountPda(
-      keypair.publicKey,
-      marketPda
+      keypair.publicKey
     );
     [mockOraclePda, mockOracleBump] = await sdk.findOraclePda(marketSymbol);
   });
@@ -248,25 +247,22 @@ describe("Contract Tests", () => {
   it("Creates a margin account", async () => {
     try {
       // Check if margin account already exists
-      const existingMarginAccount = await sdk.getMarginAccount(keypair.publicKey, marketPda);
+      const existingMarginAccount = await sdk.getMarginAccount(keypair.publicKey);
       console.log('Margin account already exists, skipping creation');
       
       assert.equal(existingMarginAccount.owner.toString(), keypair.publicKey.toString());
-      assert.equal(existingMarginAccount.perpMarket.toString(), marketPda.toString());
       assert.deepEqual(existingMarginAccount.marginType, { isolated: {} });
     } catch (error) {
       // Margin account doesn't exist, create it
       console.log('Creating new margin account...');
       const marginAccount = await sdk.buildCreateMarginAccountTransaction({
-        market: marketPda,
         marginType: { isolated: {} }
       }, keypair.publicKey);
 
       await provider.sendAndConfirm(marginAccount);
 
-      const marginAccountDetails = await sdk.getMarginAccount(keypair.publicKey, marketPda);
+      const marginAccountDetails = await sdk.getMarginAccount(keypair.publicKey);
       assert.equal(marginAccountDetails.owner.toString(), keypair.publicKey.toString());
-      assert.equal(marginAccountDetails.perpMarket.toString(), marketPda.toString());
       assert.deepEqual(marginAccountDetails.marginType, { isolated: {} });
     }
   });
@@ -275,7 +271,7 @@ describe("Contract Tests", () => {
     const amount = new BN(100_000_000 * 1_000_000); // 100,000,000 tokens scaled to 6 decimals
     
     // Get current balance
-    const marginAccountBefore = await sdk.getMarginAccount(keypair.publicKey, marketPda);
+    const marginAccountBefore = await sdk.getMarginAccount(keypair.publicKey);
     const userTokenBefore = await connection.getTokenAccountBalance(userTokenAccount);
     
     const depositTx = await sdk.buildDepositCollateralTransaction({
@@ -289,7 +285,7 @@ describe("Contract Tests", () => {
 
     await provider.sendAndConfirm(depositTx);
 
-    const marginAccountAfter = await sdk.getMarginAccount(keypair.publicKey, marketPda);
+    const marginAccountAfter = await sdk.getMarginAccount(keypair.publicKey);
     const userTokenAfter = await connection.getTokenAccountBalance(userTokenAccount);
     
     // Check that collateral increased by the deposit amount
@@ -305,7 +301,7 @@ describe("Contract Tests", () => {
     const amount = new BN(20_000_000 * 1_000_000); // 20,000,000 tokens scaled to 6 decimals
     
     // Get current balances
-    const marginAccountBefore = await sdk.getMarginAccount(keypair.publicKey, marketPda);
+    const marginAccountBefore = await sdk.getMarginAccount(keypair.publicKey);
     const userTokenBefore = await connection.getTokenAccountBalance(userTokenAccount);
 
     const withdrawTx = await sdk.buildWithdrawCollateralTransaction({
@@ -319,7 +315,7 @@ describe("Contract Tests", () => {
 
     await provider.sendAndConfirm(withdrawTx);
 
-    const marginAccountAfter = await sdk.getMarginAccount(keypair.publicKey, marketPda);
+    const marginAccountAfter = await sdk.getMarginAccount(keypair.publicKey);
     const userTokenAfter = await connection.getTokenAccountBalance(userTokenAccount);
     
     // Check that collateral decreased by the withdrawal amount
@@ -338,7 +334,7 @@ describe("Contract Tests", () => {
     const leverage = new BN(5);
     
     // Log margin account state before placing order
-    const marginAccountBefore = await sdk.getMarginAccount(keypair.publicKey, marketPda);
+    const marginAccountBefore = await sdk.getMarginAccount(keypair.publicKey);
     console.log('\n=== COLLATERAL TRACKING ===');
     console.log('Before Placing Order:');
     console.log('- Collateral:', marginAccountBefore.collateral.toNumber(), 'tokens');
@@ -357,7 +353,7 @@ describe("Contract Tests", () => {
     await provider.sendAndConfirm(placeOrderTx);
 
     // Get the position PDA from the margin account
-    const marginAccountAfterOrder = await sdk.getMarginAccount(keypair.publicKey, marketPda);
+    const marginAccountAfterOrder = await sdk.getMarginAccount(keypair.publicKey);
     const positionPda = marginAccountAfterOrder.positions[0];
 
     // Verify position was created
@@ -386,7 +382,7 @@ describe("Contract Tests", () => {
     console.log('- Expected PnL:', expectedPnL);
     
     // Get margin account state before closing
-    const marginAccountBeforeClose = await sdk.getMarginAccount(keypair.publicKey, marketPda);
+    const marginAccountBeforeClose = await sdk.getMarginAccount(keypair.publicKey);
     
     const closeOrderTx = await sdk.buildCloseMarketOrderTransaction({
       market: marketPda,
@@ -398,7 +394,7 @@ describe("Contract Tests", () => {
     await provider.sendAndConfirm(closeOrderTx);
 
     // Verify the margin account state after closing
-    const marginAccountAfterClose = await sdk.getMarginAccount(keypair.publicKey, marketPda);
+    const marginAccountAfterClose = await sdk.getMarginAccount(keypair.publicKey);
     console.log('\nAfter Closing Position:');
     console.log('- Collateral:', marginAccountAfterClose.collateral.toNumber() / 1_000_000, 'tokens');
     console.log('- Allocated Margin:', marginAccountAfterClose.allocatedMargin.toNumber() / 1_000_000, 'tokens');
@@ -433,7 +429,7 @@ describe("Contract Tests", () => {
     await provider.sendAndConfirm(placeOrderTx);
 
     // Get the position PDA from the margin account
-    const marginAccountAfterOrder = await sdk.getMarginAccount(keypair.publicKey, marketPda);
+    const marginAccountAfterOrder = await sdk.getMarginAccount(keypair.publicKey);
     const positionPda = marginAccountAfterOrder.positions[0];
 
     // Verify position was created
@@ -462,7 +458,7 @@ describe("Contract Tests", () => {
     console.log('- Expected PnL:', expectedPnL);
     
     // Get margin account state before closing
-    const marginAccountBeforeClose = await sdk.getMarginAccount(keypair.publicKey, marketPda);
+    const marginAccountBeforeClose = await sdk.getMarginAccount(keypair.publicKey);
     
     const closeOrderTx = await sdk.buildCloseMarketOrderTransaction({
       market: marketPda,
@@ -474,7 +470,7 @@ describe("Contract Tests", () => {
     await provider.sendAndConfirm(closeOrderTx);
 
     // Verify the margin account state after closing
-    const marginAccountAfterClose = await sdk.getMarginAccount(keypair.publicKey, marketPda);
+    const marginAccountAfterClose = await sdk.getMarginAccount(keypair.publicKey);
     console.log('\nAfter Closing Position:');
     console.log('- Collateral:', marginAccountAfterClose.collateral.toNumber() / 1_000_000, 'tokens');
     console.log('- Allocated Margin:', marginAccountAfterClose.allocatedMargin.toNumber() / 1_000_000, 'tokens');
@@ -508,7 +504,7 @@ describe("Contract Tests", () => {
     await provider.sendAndConfirm(placeOrderTx);
 
     // Get the position PDA from the margin account
-    const marginAccountAfterOrder = await sdk.getMarginAccount(keypair.publicKey, marketPda);
+    const marginAccountAfterOrder = await sdk.getMarginAccount(keypair.publicKey);
     const positionPda = marginAccountAfterOrder.positions[0];
 
     // Get the position details
@@ -521,7 +517,7 @@ describe("Contract Tests", () => {
     });
     
     // Get margin account state before closing
-    const marginAccountBeforeClose = await sdk.getMarginAccount(keypair.publicKey, marketPda);
+    const marginAccountBeforeClose = await sdk.getMarginAccount(keypair.publicKey);
     
     const closeOrderTx = await sdk.buildCloseMarketOrderTransaction({
       market: marketPda,
@@ -533,7 +529,7 @@ describe("Contract Tests", () => {
     await provider.sendAndConfirm(closeOrderTx);
 
     // Verify the margin account state after closing
-    const marginAccountAfterClose = await sdk.getMarginAccount(keypair.publicKey, marketPda);
+    const marginAccountAfterClose = await sdk.getMarginAccount(keypair.publicKey);
     assert.equal(marginAccountAfterClose.positions.length, 0);
     assert.isTrue(marginAccountAfterClose.collateral.lt(marginAccountBeforeClose.collateral));
     
@@ -560,7 +556,7 @@ describe("Contract Tests", () => {
     await provider.sendAndConfirm(placeOrderTx);
 
     // Get the position PDA from the margin account
-    const marginAccountAfterOrder = await sdk.getMarginAccount(keypair.publicKey, marketPda);
+    const marginAccountAfterOrder = await sdk.getMarginAccount(keypair.publicKey);
     const positionPda = marginAccountAfterOrder.positions[0];
 
     // Get the position details
@@ -573,7 +569,7 @@ describe("Contract Tests", () => {
     });
     
     // Get margin account state before closing
-    const marginAccountBeforeClose = await sdk.getMarginAccount(keypair.publicKey, marketPda);
+    const marginAccountBeforeClose = await sdk.getMarginAccount(keypair.publicKey);
     
     const closeOrderTx = await sdk.buildCloseMarketOrderTransaction({
       market: marketPda,
@@ -585,7 +581,7 @@ describe("Contract Tests", () => {
     await provider.sendAndConfirm(closeOrderTx);
 
     // Verify the margin account state after closing
-    const marginAccountAfterClose = await sdk.getMarginAccount(keypair.publicKey, marketPda);
+    const marginAccountAfterClose = await sdk.getMarginAccount(keypair.publicKey);
     assert.equal(marginAccountAfterClose.positions.length, 0);
     assert.isTrue(marginAccountAfterClose.collateral.lt(marginAccountBeforeClose.collateral));
     
@@ -598,7 +594,7 @@ describe("Contract Tests", () => {
     console.log('\n=== CONSECUTIVE ORDER TEST ===');
     
     // Get initial margin account state
-    const initialMarginAccount = await sdk.getMarginAccount(keypair.publicKey, marketPda);
+    const initialMarginAccount = await sdk.getMarginAccount(keypair.publicKey);
     console.log('\nInitial State:');
     console.log('- Collateral:', initialMarginAccount.collateral.toNumber() / 1_000_000, 'tokens');
     console.log('- Allocated Margin:', initialMarginAccount.allocatedMargin.toNumber() / 1_000_000, 'tokens');
@@ -631,7 +627,7 @@ describe("Contract Tests", () => {
     await provider.sendAndConfirm(placeOrderTx1);
 
     // Get position and margin account after placing order
-    const marginAccountAfterOrder1 = await sdk.getMarginAccount(keypair.publicKey, marketPda);
+    const marginAccountAfterOrder1 = await sdk.getMarginAccount(keypair.publicKey);
     const positionPda1 = marginAccountAfterOrder1.positions[0];
     const position1 = await sdk.getPosition(positionPda1);
     
@@ -661,7 +657,7 @@ describe("Contract Tests", () => {
     await provider.sendAndConfirm(closeOrderTx1);
 
     // Get margin account after closing
-    const marginAccountAfterClose1 = await sdk.getMarginAccount(keypair.publicKey, marketPda);
+    const marginAccountAfterClose1 = await sdk.getMarginAccount(keypair.publicKey);
     console.log('After closing order:');
     console.log('- Collateral:', marginAccountAfterClose1.collateral.toNumber() / 1_000_000, 'tokens');
     console.log('- Allocated Margin:', marginAccountAfterClose1.allocatedMargin.toNumber() / 1_000_000, 'tokens');
@@ -698,7 +694,7 @@ describe("Contract Tests", () => {
     await provider.sendAndConfirm(placeOrderTx2);
 
     // Get position and margin account after placing order
-    const marginAccountAfterOrder2 = await sdk.getMarginAccount(keypair.publicKey, marketPda);
+    const marginAccountAfterOrder2 = await sdk.getMarginAccount(keypair.publicKey);
     const positionPda2 = marginAccountAfterOrder2.positions[0];
     const position2 = await sdk.getPosition(positionPda2);
     
@@ -728,7 +724,7 @@ describe("Contract Tests", () => {
     await provider.sendAndConfirm(closeOrderTx2);
 
     // Get margin account after closing
-    const marginAccountAfterClose2 = await sdk.getMarginAccount(keypair.publicKey, marketPda);
+    const marginAccountAfterClose2 = await sdk.getMarginAccount(keypair.publicKey);
     console.log('After closing order:');
     console.log('- Collateral:', marginAccountAfterClose2.collateral.toNumber() / 1_000_000, 'tokens');
     console.log('- Allocated Margin:', marginAccountAfterClose2.allocatedMargin.toNumber() / 1_000_000, 'tokens');
@@ -765,7 +761,7 @@ describe("Contract Tests", () => {
     await provider.sendAndConfirm(placeOrderTx3);
 
     // Get position and margin account after placing order
-    const marginAccountAfterOrder3 = await sdk.getMarginAccount(keypair.publicKey, marketPda);
+    const marginAccountAfterOrder3 = await sdk.getMarginAccount(keypair.publicKey);
     const positionPda3 = marginAccountAfterOrder3.positions[0];
     const position3 = await sdk.getPosition(positionPda3);
     
@@ -795,7 +791,7 @@ describe("Contract Tests", () => {
     await provider.sendAndConfirm(closeOrderTx3);
 
     // Get margin account after closing
-    const marginAccountAfterClose3 = await sdk.getMarginAccount(keypair.publicKey, marketPda);
+    const marginAccountAfterClose3 = await sdk.getMarginAccount(keypair.publicKey);
     console.log('After closing order:');
     console.log('- Collateral:', marginAccountAfterClose3.collateral.toNumber() / 1_000_000, 'tokens');
     console.log('- Allocated Margin:', marginAccountAfterClose3.allocatedMargin.toNumber() / 1_000_000, 'tokens');
@@ -832,7 +828,7 @@ describe("Contract Tests", () => {
     await provider.sendAndConfirm(placeOrderTx4);
 
     // Get final margin account state
-    const finalMarginAccount = await sdk.getMarginAccount(keypair.publicKey, marketPda);
+    const finalMarginAccount = await sdk.getMarginAccount(keypair.publicKey);
     const finalPositionPda = finalMarginAccount.positions[0];
     const finalPosition = await sdk.getPosition(finalPositionPda);
     
@@ -859,7 +855,7 @@ describe("Contract Tests", () => {
     await provider.sendAndConfirm(closeFinalTx);
 
     // Verify final cleanup
-    const finalCleanupMargin = await sdk.getMarginAccount(keypair.publicKey, marketPda);
+    const finalCleanupMargin = await sdk.getMarginAccount(keypair.publicKey);
     console.log('After final cleanup:');
     console.log('- Collateral:', finalCleanupMargin.collateral.toNumber() / 1_000_000, 'tokens');
     console.log('- Allocated Margin:', finalCleanupMargin.allocatedMargin.toNumber() / 1_000_000, 'tokens');
@@ -880,7 +876,7 @@ describe("Contract Tests", () => {
     const leverage = new BN(10); // High leverage
     
     // Log margin account state before placing order
-    const marginAccountBefore = await sdk.getMarginAccount(keypair.publicKey, marketPda);
+    const marginAccountBefore = await sdk.getMarginAccount(keypair.publicKey);
     console.log('\nMargin Account Before Order:');
     console.log('- Positions:', marginAccountBefore.positions.map(p => p.toBase58()));
     console.log('- Collateral:', marginAccountBefore.collateral.toNumber() / 1_000_000);
@@ -898,7 +894,7 @@ describe("Contract Tests", () => {
     await provider.sendAndConfirm(placeOrderTx);
 
     // Get the position PDA from the margin account
-    const marginAccountAfterOrder = await sdk.getMarginAccount(keypair.publicKey, marketPda);
+    const marginAccountAfterOrder = await sdk.getMarginAccount(keypair.publicKey);
     const positionPda = marginAccountAfterOrder.positions[0];
 
     // Get the position details
@@ -947,7 +943,7 @@ describe("Contract Tests", () => {
     await liquidatorProvider.sendAndConfirm(liquidateTx);
 
     // Verify the margin account state after liquidation
-    const marginAccountAfterLiquidation = await sdk.getMarginAccount(keypair.publicKey, marketPda);
+    const marginAccountAfterLiquidation = await sdk.getMarginAccount(keypair.publicKey);
     console.log('\nMargin Account After Liquidation:');
     console.log('- Positions:', marginAccountAfterLiquidation.positions.map(p => p.toBase58()));
     console.log('- Collateral:', marginAccountAfterLiquidation.collateral.toNumber() / 1_000_000);
@@ -1071,7 +1067,7 @@ describe("Contract Tests", () => {
     
     // Clean up any existing positions
     try {
-      const marginAccount = await sdk.getMarginAccount(keypair.publicKey, marketPda);
+      const marginAccount = await sdk.getMarginAccount(keypair.publicKey);
       
       // Close all positions
       for (const positionKey of marginAccount.positions) {
@@ -1096,7 +1092,7 @@ describe("Contract Tests", () => {
       }
 
       // Verify cleanup
-      const marginAccountAfter = await sdk.getMarginAccount(keypair.publicKey, marketPda);
+      const marginAccountAfter = await sdk.getMarginAccount(keypair.publicKey);
       if (marginAccountAfter.positions.length > 0) {
         console.log('Warning: Some positions could not be closed');
         console.log('Remaining positions:', marginAccountAfter.positions.map(p => p.toBase58()));
@@ -1107,7 +1103,7 @@ describe("Contract Tests", () => {
     
     // Reset margin account collateral to a known state (very large amount for very large orders)
     try {
-      const marginAccount = await sdk.getMarginAccount(keypair.publicKey, marketPda);
+      const marginAccount = await sdk.getMarginAccount(keypair.publicKey);
       const targetCollateral = 500_000_000 * 1_000_000; // 500,000,000 tokens scaled to 6 decimals
       const currentCollateral = marginAccount.collateral.toNumber();
       

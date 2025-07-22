@@ -1,5 +1,5 @@
 {
-  "address": "9wdJq5R7VUuXDrAZBnXfDqc1vW6nwAW5aYneMKiryppz",
+  "address": "6UnAEvz8tLBLXM2uDmbYWYKZ6UuAgdxJHTss8HC9h3wf",
   "metadata": {
     "name": "contracts",
     "version": "0.1.0",
@@ -94,16 +94,9 @@
               {
                 "kind": "account",
                 "path": "owner"
-              },
-              {
-                "kind": "account",
-                "path": "market"
               }
             ]
           }
-        },
-        {
-          "name": "market"
         },
         {
           "name": "system_program",
@@ -479,62 +472,6 @@
         }
       ],
       "args": []
-    },
-    {
-      "name": "update_funding_payments",
-      "discriminator": [
-        109,
-        213,
-        51,
-        145,
-        107,
-        110,
-        117,
-        216
-      ],
-      "accounts": [
-        {
-          "name": "market",
-          "writable": true
-        },
-        {
-          "name": "authority",
-          "signer": true
-        }
-      ],
-      "args": []
-    },
-    {
-      "name": "update_funding_rate",
-      "discriminator": [
-        201,
-        178,
-        116,
-        212,
-        166,
-        144,
-        72,
-        238
-      ],
-      "accounts": [
-        {
-          "name": "market",
-          "writable": true
-        },
-        {
-          "name": "authority",
-          "signer": true,
-          "relations": [
-            "market"
-          ]
-        }
-      ],
-      "args": [
-        {
-          "name": "new_funding_rate",
-          "type": "i64"
-        }
-      ]
     },
     {
       "name": "update_market_params",
@@ -1172,10 +1109,6 @@
             "type": "pubkey"
           },
           {
-            "name": "perp_market",
-            "type": "pubkey"
-          },
-          {
             "name": "margin_type",
             "type": {
               "defined": {
@@ -1215,10 +1148,6 @@
           },
           {
             "name": "margin_account",
-            "type": "pubkey"
-          },
-          {
-            "name": "market",
             "type": "pubkey"
           },
           {

@@ -211,8 +211,7 @@ export class PerpetualSwapSDK {
   ): Promise<Transaction> {
     const [marginAccountPda, marginAccountBump] = findMarginAccountPda(
       this.program.programId,
-      userPublicKey,
-      params.market
+      userPublicKey
     );
 
     const instruction = await this.program.methods
@@ -220,7 +219,7 @@ export class PerpetualSwapSDK {
       .accountsStrict({
         owner: userPublicKey,
         marginAccount: marginAccountPda,
-        market: params.market,
+        // Remove market parameter - margin account is now global
         systemProgram: SystemProgram.programId,
       })
       .instruction();
@@ -266,7 +265,7 @@ export class PerpetualSwapSDK {
     userPublicKey: PublicKey
   ): Promise<Transaction> {
     // Get the margin account data to check for positions
-    const marginAccount = await this.getMarginAccount(userPublicKey, params.market);
+    const marginAccount = await this.getMarginAccount(userPublicKey);
     
     // If there are no positions, we can proceed without position PDAs
     if (marginAccount.positions.length === 0) {
@@ -333,10 +332,10 @@ export class PerpetualSwapSDK {
    * Get margin account details
    */
   async getMarginAccount(
-    userPublicKey: PublicKey,
-    marketPda: PublicKey
+    userPublicKey: PublicKey
+    // Remove marketPda parameter - margin account is now global
   ): Promise<MarginAccount> {
-    const [marginAccountPda] = await this.findMarginAccountPda(userPublicKey, marketPda);
+    const [marginAccountPda] = await this.findMarginAccountPda(userPublicKey);
     return await this.program.account.marginAccount.fetch(marginAccountPda) as unknown as MarginAccount;
   }
 
@@ -367,10 +366,10 @@ export class PerpetualSwapSDK {
    * Find the PDA for a margin account
    */
   async findMarginAccountPda(
-    owner: PublicKey,
-    marketPda: PublicKey
+    owner: PublicKey
+    // Remove marketPda parameter - margin account is now global
   ): Promise<[PublicKey, number]> {
-    return findMarginAccountPda(this.program.programId, owner, marketPda);
+    return findMarginAccountPda(this.program.programId, owner);
   }
 
   /**

@@ -133,7 +133,6 @@ impl Order {
 #[derive(Default)]
 pub struct MarginAccount {
     pub owner: Pubkey,
-    pub perp_market: Pubkey,
     pub margin_type: MarginType,  // New field to specify margin type
     pub collateral: u64,
     pub allocated_margin: u64,    // For isolated margin tracking
@@ -144,7 +143,6 @@ pub struct MarginAccount {
 impl MarginAccount {
     pub const SPACE: usize = 8 + // discriminator
         32 + // owner: Pubkey
-        32 + // perp_market: Pubkey
         1 + // margin_type: MarginType
         8 + // collateral: u64
         8 + // allocated_margin: u64
