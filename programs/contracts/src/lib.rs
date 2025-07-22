@@ -77,13 +77,13 @@ pub mod contracts {
         instructions::collateral::withdraw_collateral(ctx, amount)
     }
 
-    pub fn update_funding_rate(ctx: Context<UpdateFundingRate>, new_funding_rate: i64) -> Result<()> {
-        instructions::funding::update_funding_rate(ctx, new_funding_rate)
-    }
+    // pub fn update_funding_rate(ctx: Context<UpdateFundingRate>, new_funding_rate: i64) -> Result<()> {
+    //     instructions::funding::update_funding_rate(ctx, new_funding_rate)
+    // }
 
-    pub fn update_funding_payments(ctx: Context<UpdateFundingPayments>) -> Result<()> {
-        instructions::funding::update_funding_payments(ctx)
-    }
+    // pub fn update_funding_payments(ctx: Context<UpdateFundingPayments>) -> Result<()> {
+    //     instructions::funding::update_funding_payments(ctx)
+    // }
 
     pub fn place_market_order(
         ctx: Context<PlaceMarketOrder>,

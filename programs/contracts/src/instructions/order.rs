@@ -1,10 +1,10 @@
-use anchor_lang::prelude::*;
-use mock_oracle::Oracle;
 use crate::{
     errors::ErrorCode,
     events::*,
-    state::{Market, Position, OrderType, Side, MarginAccount, MarginType}
+    state::{MarginAccount, MarginType, Market, OrderType, Position, Side},
 };
+use anchor_lang::prelude::*;
+use mock_oracle::Oracle;
 
 #[derive(Accounts)]
 #[instruction(side: Side, size: u64, leverage: u64, position_bump: u8, uid: u64)]
@@ -52,11 +52,12 @@ pub fn place_market_order(
     require!(market.is_active, ErrorCode::MarketInactive);
     require!(leverage <= market.max_leverage, ErrorCode::LeverageTooHigh);
     require!(size > 0, ErrorCode::InvalidOrderSize);
-    
+
     // Validate that leverage is compatible with initial margin ratio
     // For leverage to work, we need: 1/leverage >= initial_margin_ratio/10000
     // This ensures required collateral >= minimum margin
-    let max_allowed_leverage = 10000u64.checked_div(market.initial_margin_ratio)
+    let max_allowed_leverage = 10000u64
+        .checked_div(market.initial_margin_ratio)
         .ok_or(ErrorCode::MathOverflow)?;
     require!(leverage <= max_allowed_leverage, ErrorCode::LeverageTooHigh);
 
@@ -64,18 +65,10 @@ pub fn place_market_order(
     let oracle_data = ctx.accounts.price_update.try_borrow_data()?;
     let oracle = Oracle::try_deserialize(&mut oracle_data.as_ref())?;
     let current_price = oracle.price;
-
-    // Calculate required collateral
-    // Scale price by 1e6 to match token decimals
-    let scaled_price = current_price
-        .checked_mul(1_000_000)
-        .ok_or(ErrorCode::MathOverflow)?;
-
-    // Calculate position value with proper decimal handling
+    
+    // SIMPLE CALCULATION - No scaling
     let position_value = size
-        .checked_mul(scaled_price)
-        .ok_or(ErrorCode::MathOverflow)?
-        .checked_div(1_000_000)  // Divide by 1e6 to get back to token decimals
+        .checked_mul(current_price)
         .ok_or(ErrorCode::MathOverflow)?;
 
     let required_collateral = position_value
@@ -89,23 +82,33 @@ pub fn place_market_order(
         .checked_div(10000)
         .ok_or(ErrorCode::MathOverflow)?;
 
-    require!(required_collateral >= min_required_margin, ErrorCode::InsufficientMargin);
+    require!(
+        required_collateral >= min_required_margin,
+        ErrorCode::InsufficientMargin
+    );
 
     // Check if there's enough available margin based on margin type
     match margin_account.margin_type {
         MarginType::Isolated => {
             // For isolated margin, check if there's enough available margin
             let available_margin = margin_account.available_margin()?;
-            require!(available_margin >= required_collateral, ErrorCode::InsufficientMargin);
-            
+            require!(
+                available_margin >= required_collateral,
+                ErrorCode::InsufficientMargin
+            );
+
             // Allocate margin to this position
-            margin_account.allocated_margin = margin_account.allocated_margin
+            margin_account.allocated_margin = margin_account
+                .allocated_margin
                 .checked_add(required_collateral)
                 .ok_or(ErrorCode::MathOverflow)?;
-        },
+        }
         MarginType::Cross => {
             // For cross margin, check if total margin is sufficient
-            require!(margin_account.collateral >= required_collateral, ErrorCode::InsufficientMargin);
+            require!(
+                margin_account.collateral >= required_collateral,
+                ErrorCode::InsufficientMargin
+            );
         }
     }
 
@@ -131,12 +134,14 @@ pub fn place_market_order(
     // Update market state
     match side {
         Side::Long => {
-            market.base_asset_reserve = market.base_asset_reserve
+            market.base_asset_reserve = market
+                .base_asset_reserve
                 .checked_add(size)
                 .ok_or(ErrorCode::MathOverflow)?;
         }
         Side::Short => {
-            market.base_asset_reserve = market.base_asset_reserve
+            market.base_asset_reserve = market
+                .base_asset_reserve
                 .checked_sub(size)
                 .ok_or(ErrorCode::MathOverflow)?;
         }
@@ -221,23 +226,22 @@ pub fn close_market_order(ctx: Context<CloseMarketOrder>) -> Result<()> {
     let pnl = match position.side {
         Side::Long => {
             msg!("Calculating long PnL: (exit_price - entry_price) * size");
-            let price_diff = exit_price.checked_sub(entry_price)
-                .ok_or_else(|| {
-                    msg!("Overflow in price difference calculation for long");
-                    ErrorCode::MathOverflow
-                })?;
-            price_diff.checked_mul(size)
-        },
-        Side::Short => {
-            msg!("Calculating short PnL: (entry_price - exit_price) * size");
-            let price_diff = entry_price.checked_sub(exit_price)
-                .ok_or_else(|| {
-                    msg!("Overflow in price difference calculation for short");
-                    ErrorCode::MathOverflow
-                })?;
+            let price_diff = exit_price.checked_sub(entry_price).ok_or_else(|| {
+                msg!("Overflow in price difference calculation for long");
+                ErrorCode::MathOverflow
+            })?;
             price_diff.checked_mul(size)
         }
-    }.ok_or_else(|| {
+        Side::Short => {
+            msg!("Calculating short PnL: (entry_price - exit_price) * size");
+            let price_diff = entry_price.checked_sub(exit_price).ok_or_else(|| {
+                msg!("Overflow in price difference calculation for short");
+                ErrorCode::MathOverflow
+            })?;
+            price_diff.checked_mul(size)
+        }
+    }
+    .ok_or_else(|| {
         msg!("Overflow in PnL calculation");
         ErrorCode::MathOverflow
     })?;
@@ -254,19 +258,29 @@ pub fn close_market_order(ctx: Context<CloseMarketOrder>) -> Result<()> {
     match position_side {
         Side::Long => {
             msg!("Updating market state for long position");
-            market.base_asset_reserve = market.base_asset_reserve
+            market.base_asset_reserve = market
+                .base_asset_reserve
                 .checked_sub(position_size)
                 .ok_or_else(|| {
-                    msg!("Overflow in base_asset_reserve subtraction: {} - {}", market.base_asset_reserve, position_size);
+                    msg!(
+                        "Overflow in base_asset_reserve subtraction: {} - {}",
+                        market.base_asset_reserve,
+                        position_size
+                    );
                     ErrorCode::MathOverflow
                 })?;
         }
         Side::Short => {
             msg!("Updating market state for short position");
-            market.base_asset_reserve = market.base_asset_reserve
+            market.base_asset_reserve = market
+                .base_asset_reserve
                 .checked_add(position_size)
                 .ok_or_else(|| {
-                    msg!("Overflow in base_asset_reserve addition: {} + {}", market.base_asset_reserve, position_size);
+                    msg!(
+                        "Overflow in base_asset_reserve addition: {} + {}",
+                        market.base_asset_reserve,
+                        position_size
+                    );
                     ErrorCode::MathOverflow
                 })?;
         }
@@ -276,47 +290,72 @@ pub fn close_market_order(ctx: Context<CloseMarketOrder>) -> Result<()> {
     match margin_account.margin_type {
         MarginType::Isolated => {
             msg!("Updating isolated margin account");
-            margin_account.allocated_margin = margin_account.allocated_margin
+            margin_account.allocated_margin = margin_account
+                .allocated_margin
                 .checked_sub(position_collateral)
                 .ok_or_else(|| {
-                    msg!("Overflow in allocated_margin subtraction: {} - {}", margin_account.allocated_margin, position_collateral);
+                    msg!(
+                        "Overflow in allocated_margin subtraction: {} - {}",
+                        margin_account.allocated_margin,
+                        position_collateral
+                    );
                     ErrorCode::MathOverflow
                 })?;
-            
+
             if pnl > 0 {
                 msg!("Adding positive PnL to collateral: {}", pnl);
-                margin_account.collateral = margin_account.collateral
+                margin_account.collateral = margin_account
+                    .collateral
                     .checked_add(pnl as u64)
                     .ok_or_else(|| {
-                        msg!("Overflow in collateral addition: {} + {}", margin_account.collateral, pnl);
+                        msg!(
+                            "Overflow in collateral addition: {} + {}",
+                            margin_account.collateral,
+                            pnl
+                        );
                         ErrorCode::MathOverflow
                     })?;
             } else {
                 msg!("Subtracting negative PnL from collateral: {}", -pnl);
-                margin_account.collateral = margin_account.collateral
+                margin_account.collateral = margin_account
+                    .collateral
                     .checked_sub((-pnl) as u64)
                     .ok_or_else(|| {
-                        msg!("Overflow in collateral subtraction: {} - {}", margin_account.collateral, -pnl);
+                        msg!(
+                            "Overflow in collateral subtraction: {} - {}",
+                            margin_account.collateral,
+                            -pnl
+                        );
                         ErrorCode::MathOverflow
                     })?;
             }
-        },
+        }
         MarginType::Cross => {
             msg!("Updating cross margin account");
             if pnl > 0 {
                 msg!("Adding positive PnL to collateral: {}", pnl);
-                margin_account.collateral = margin_account.collateral
+                margin_account.collateral = margin_account
+                    .collateral
                     .checked_add(pnl as u64)
                     .ok_or_else(|| {
-                        msg!("Overflow in collateral addition: {} + {}", margin_account.collateral, pnl);
+                        msg!(
+                            "Overflow in collateral addition: {} + {}",
+                            margin_account.collateral,
+                            pnl
+                        );
                         ErrorCode::MathOverflow
                     })?;
             } else {
                 msg!("Subtracting negative PnL from collateral: {}", -pnl);
-                margin_account.collateral = margin_account.collateral
+                margin_account.collateral = margin_account
+                    .collateral
                     .checked_sub((-pnl) as u64)
                     .ok_or_else(|| {
-                        msg!("Overflow in collateral subtraction: {} - {}", margin_account.collateral, -pnl);
+                        msg!(
+                            "Overflow in collateral subtraction: {} - {}",
+                            margin_account.collateral,
+                            -pnl
+                        );
                         ErrorCode::MathOverflow
                     })?;
             }
@@ -324,7 +363,11 @@ pub fn close_market_order(ctx: Context<CloseMarketOrder>) -> Result<()> {
     }
 
     // Remove position from margin account's list
-    if let Some(pos) = margin_account.positions.iter().position(|&p| p == position_key) {
+    if let Some(pos) = margin_account
+        .positions
+        .iter()
+        .position(|&p| p == position_key)
+    {
         margin_account.positions.remove(pos);
     }
 
@@ -382,18 +425,25 @@ pub fn liquidate_market_order(ctx: Context<LiquidateMarketOrder>) -> Result<()> 
 
     // Calculate position value and equity
     msg!("Position size: {}", position.size);
-    let position_value = position.size
-        .checked_mul(current_price)
-        .ok_or_else(|| {
-            msg!("Overflow in position_value calculation: {} * {}", position.size, current_price);
-            ErrorCode::MathOverflow
-        })?;
+    let position_value = position.size.checked_mul(current_price).ok_or_else(|| {
+        msg!(
+            "Overflow in position_value calculation: {} * {}",
+            position.size,
+            current_price
+        );
+        ErrorCode::MathOverflow
+    })?;
     msg!("Position value: {}", position_value);
 
-    let entry_value = position.size
+    let entry_value = position
+        .size
         .checked_mul(position.entry_price)
         .ok_or_else(|| {
-            msg!("Overflow in entry_value calculation: {} * {}", position.size, position.entry_price);
+            msg!(
+                "Overflow in entry_value calculation: {} * {}",
+                position.size,
+                position.entry_price
+            );
             ErrorCode::MathOverflow
         })?;
     msg!("Entry value: {}", entry_value);
@@ -406,8 +456,12 @@ pub fn liquidate_market_order(ctx: Context<LiquidateMarketOrder>) -> Result<()> 
     let unrealized_pnl = match position.side {
         Side::Long => position_value_i64.checked_sub(entry_value_i64),
         Side::Short => entry_value_i64.checked_sub(position_value_i64),
-    }.ok_or_else(|| {
-        msg!("Overflow in unrealized_pnl calculation for {:?} position", position.side);
+    }
+    .ok_or_else(|| {
+        msg!(
+            "Overflow in unrealized_pnl calculation for {:?} position",
+            position.side
+        );
         ErrorCode::MathOverflow
     })?;
     msg!("Unrealized PnL: {}", unrealized_pnl);
@@ -422,8 +476,13 @@ pub fn liquidate_market_order(ctx: Context<LiquidateMarketOrder>) -> Result<()> 
         } else {
             position.collateral.checked_sub((-unrealized_pnl) as u64)
         }
-    }.ok_or_else(|| {
-        msg!("Overflow in equity calculation: collateral {} +/- PnL {}", position.collateral, unrealized_pnl);
+    }
+    .ok_or_else(|| {
+        msg!(
+            "Overflow in equity calculation: collateral {} +/- PnL {}",
+            position.collateral,
+            unrealized_pnl
+        );
         ErrorCode::MathOverflow
     })?;
     msg!("Position equity: {}", equity);
@@ -432,48 +491,70 @@ pub fn liquidate_market_order(ctx: Context<LiquidateMarketOrder>) -> Result<()> 
     let maintenance_margin = position_value
         .checked_mul(market.maintenance_margin_ratio)
         .ok_or_else(|| {
-            msg!("Overflow in maintenance_margin calculation: {} * {}", position_value, market.maintenance_margin_ratio);
+            msg!(
+                "Overflow in maintenance_margin calculation: {} * {}",
+                position_value,
+                market.maintenance_margin_ratio
+            );
             ErrorCode::MathOverflow
         })?
         .checked_div(10000)
         .ok_or_else(|| {
-            msg!("Overflow in maintenance_margin division: {} / 10000", position_value * market.maintenance_margin_ratio);
+            msg!(
+                "Overflow in maintenance_margin division: {} / 10000",
+                position_value * market.maintenance_margin_ratio
+            );
             ErrorCode::MathOverflow
         })?;
     msg!("Maintenance margin: {}", maintenance_margin);
 
-    require!(equity < maintenance_margin, ErrorCode::PositionNotLiquidatable);
+    require!(
+        equity < maintenance_margin,
+        ErrorCode::PositionNotLiquidatable
+    );
 
     // Calculate liquidation fees
     let liquidation_fee = position_value
         .checked_mul(market.liquidation_fee_ratio)
         .ok_or_else(|| {
-            msg!("Overflow in liquidation fee calculation: {} * {}", position_value, market.liquidation_fee_ratio);
+            msg!(
+                "Overflow in liquidation fee calculation: {} * {}",
+                position_value,
+                market.liquidation_fee_ratio
+            );
             ErrorCode::MathOverflow
         })?;
     msg!("Liquidation fee: {}", liquidation_fee);
 
-    let liquidator_fee = liquidation_fee
-        .checked_div(2)
-        .ok_or_else(|| {
-            msg!("Overflow in liquidator fee calculation: {} / 2", liquidation_fee);
-            ErrorCode::MathOverflow
-        })?;
+    let liquidator_fee = liquidation_fee.checked_div(2).ok_or_else(|| {
+        msg!(
+            "Overflow in liquidator fee calculation: {} / 2",
+            liquidation_fee
+        );
+        ErrorCode::MathOverflow
+    })?;
     msg!("Liquidator fee: {}", liquidator_fee);
 
-    let insurance_fund_fee = liquidation_fee
-        .checked_sub(liquidator_fee)
-        .ok_or_else(|| {
-            msg!("Overflow in insurance fund fee calculation: {} - {}", liquidation_fee, liquidator_fee);
-            ErrorCode::MathOverflow
-        })?;
+    let insurance_fund_fee = liquidation_fee.checked_sub(liquidator_fee).ok_or_else(|| {
+        msg!(
+            "Overflow in insurance fund fee calculation: {} - {}",
+            liquidation_fee,
+            liquidator_fee
+        );
+        ErrorCode::MathOverflow
+    })?;
     msg!("Insurance fund fee: {}", insurance_fund_fee);
 
     // Update insurance fund
-    market.insurance_fund = market.insurance_fund
+    market.insurance_fund = market
+        .insurance_fund
         .checked_add(insurance_fund_fee)
         .ok_or_else(|| {
-            msg!("Overflow in insurance_fund update: {} + {}", market.insurance_fund, insurance_fund_fee);
+            msg!(
+                "Overflow in insurance_fund update: {} + {}",
+                market.insurance_fund,
+                insurance_fund_fee
+            );
             ErrorCode::MathOverflow
         })?;
     msg!("Updated insurance fund: {}", market.insurance_fund);
@@ -488,19 +569,29 @@ pub fn liquidate_market_order(ctx: Context<LiquidateMarketOrder>) -> Result<()> 
     match position_side {
         Side::Long => {
             msg!("Updating market state for long position");
-            market.base_asset_reserve = market.base_asset_reserve
+            market.base_asset_reserve = market
+                .base_asset_reserve
                 .checked_sub(position_size)
                 .ok_or_else(|| {
-                    msg!("Overflow in base_asset_reserve subtraction: {} - {}", market.base_asset_reserve, position_size);
+                    msg!(
+                        "Overflow in base_asset_reserve subtraction: {} - {}",
+                        market.base_asset_reserve,
+                        position_size
+                    );
                     ErrorCode::MathOverflow
                 })?;
         }
         Side::Short => {
             msg!("Updating market state for short position");
-            market.base_asset_reserve = market.base_asset_reserve
+            market.base_asset_reserve = market
+                .base_asset_reserve
                 .checked_add(position_size)
                 .ok_or_else(|| {
-                    msg!("Overflow in base_asset_reserve addition: {} + {}", market.base_asset_reserve, position_size);
+                    msg!(
+                        "Overflow in base_asset_reserve addition: {} + {}",
+                        market.base_asset_reserve,
+                        position_size
+                    );
                     ErrorCode::MathOverflow
                 })?;
         }
@@ -510,14 +601,25 @@ pub fn liquidate_market_order(ctx: Context<LiquidateMarketOrder>) -> Result<()> 
     // Update margin account state
     // For liquidated positions, we set collateral to 0 since the position is underwater
     margin_account.collateral = 0;
-    margin_account.allocated_margin = margin_account.allocated_margin
+    margin_account.allocated_margin = margin_account
+        .allocated_margin
         .checked_sub(position_collateral)
         .ok_or_else(|| {
-            msg!("Overflow in allocated_margin subtraction: {} - {}", margin_account.allocated_margin, position_collateral);
+            msg!(
+                "Overflow in allocated_margin subtraction: {} - {}",
+                margin_account.allocated_margin,
+                position_collateral
+            );
             ErrorCode::MathOverflow
         })?;
-    msg!("Updated margin account collateral: {}", margin_account.collateral);
-    msg!("Updated margin account allocated margin: {}", margin_account.allocated_margin);
+    msg!(
+        "Updated margin account collateral: {}",
+        margin_account.collateral
+    );
+    msg!(
+        "Updated margin account allocated margin: {}",
+        margin_account.allocated_margin
+    );
 
     // Remove position from margin account
     margin_account.positions.retain(|&x| x != position_key);
@@ -547,4 +649,3 @@ pub fn liquidate_market_order(ctx: Context<LiquidateMarketOrder>) -> Result<()> 
 
     Ok(())
 }
-
