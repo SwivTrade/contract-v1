@@ -2,7 +2,6 @@ import { PublicKey } from '@solana/web3.js';
 import { BN } from '@coral-xyz/anchor';
 export interface MarginAccount {
     owner: PublicKey;
-    perpMarket: PublicKey;
     marginType: {
         isolated: {};
     } | {
@@ -20,7 +19,6 @@ export interface CreateMarginAccountParams {
     } | {
         cross: {};
     };
-    market: PublicKey;
 }
 export interface DepositCollateralParams {
     marginAccount: PublicKey;

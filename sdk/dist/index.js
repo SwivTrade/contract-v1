@@ -161,13 +161,13 @@ class PerpetualSwapSDK {
      * Build a transaction to create a margin account
      */
     async buildCreateMarginAccountTransaction(params, userPublicKey) {
-        const [marginAccountPda, marginAccountBump] = (0, utils_1.findMarginAccountPda)(this.program.programId, userPublicKey, params.market);
+        const [marginAccountPda, marginAccountBump] = (0, utils_1.findMarginAccountPda)(this.program.programId, userPublicKey);
         const instruction = await this.program.methods
             .createMarginAccount(params.marginType, marginAccountBump)
             .accountsStrict({
             owner: userPublicKey,
             marginAccount: marginAccountPda,
-            market: params.market,
+            // Remove market parameter - margin account is now global
             systemProgram: web3_js_1.SystemProgram.programId,
         })
             .instruction();
@@ -201,7 +201,7 @@ class PerpetualSwapSDK {
      */
     async buildWithdrawCollateralTransaction(params, userPublicKey) {
         // Get the margin account data to check for positions
-        const marginAccount = await this.getMarginAccount(userPublicKey, params.market);
+        const marginAccount = await this.getMarginAccount(userPublicKey);
         // If there are no positions, we can proceed without position PDAs
         if (marginAccount.positions.length === 0) {
             const instruction = await this.program.methods
@@ -256,8 +256,10 @@ class PerpetualSwapSDK {
     /**
      * Get margin account details
      */
-    async getMarginAccount(userPublicKey, marketPda) {
-        const [marginAccountPda] = await this.findMarginAccountPda(userPublicKey, marketPda);
+    async getMarginAccount(userPublicKey
+    // Remove marketPda parameter - margin account is now global
+    ) {
+        const [marginAccountPda] = await this.findMarginAccountPda(userPublicKey);
         return await this.program.account.marginAccount.fetch(marginAccountPda);
     }
     /**
@@ -282,8 +284,10 @@ class PerpetualSwapSDK {
     /**
      * Find the PDA for a margin account
      */
-    async findMarginAccountPda(owner, marketPda) {
-        return (0, utils_1.findMarginAccountPda)(this.program.programId, owner, marketPda);
+    async findMarginAccountPda(owner
+    // Remove marketPda parameter - margin account is now global
+    ) {
+        return (0, utils_1.findMarginAccountPda)(this.program.programId, owner);
     }
     /**
      * Find the PDA for a position
@@ -350,6 +354,16 @@ class PerpetualSwapSDK {
     async buildResumeMarketTransaction(params, authority) {
         const tx = await this.program.methods
             .resumeMarket()
+            .accountsStrict({
+            market: params.market,
+            authority,
+        })
+            .transaction();
+        return tx;
+    }
+    async buildUpdateMarketParamsTransaction(params, authority) {
+        const tx = await this.program.methods
+            .updateMarketParams(params.maintenanceMarginRatio ? new anchor_1.BN(params.maintenanceMarginRatio) : null, params.initialMarginRatio ? new anchor_1.BN(params.initialMarginRatio) : null, params.fundingInterval ? new anchor_1.BN(params.fundingInterval) : null, params.maxLeverage ? new anchor_1.BN(params.maxLeverage) : null)
             .accountsStrict({
             market: params.market,
             authority,

@@ -11,10 +11,9 @@ export declare function findMarketPda(programId: PublicKey, marketSymbol: string
  * Find the PDA for a margin account
  * @param programId The program ID
  * @param owner The owner's public key
- * @param market The market's public key
  * @returns A tuple containing the margin account PDA and the bump seed
  */
-export declare function findMarginAccountPda(programId: PublicKey, owner: PublicKey, market: PublicKey): [PublicKey, number];
+export declare function findMarginAccountPda(programId: PublicKey, owner: PublicKey): [PublicKey, number];
 /**
  * Find the PDA for a position
  * @param programId The program ID

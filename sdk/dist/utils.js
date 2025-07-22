@@ -22,14 +22,12 @@ function findMarketPda(programId, marketSymbol) {
  * Find the PDA for a margin account
  * @param programId The program ID
  * @param owner The owner's public key
- * @param market The market's public key
  * @returns A tuple containing the margin account PDA and the bump seed
  */
-function findMarginAccountPda(programId, owner, market) {
+function findMarginAccountPda(programId, owner) {
     return web3_js_1.PublicKey.findProgramAddressSync([
         Buffer.from("margin_account"),
-        owner.toBuffer(),
-        market.toBuffer()
+        owner.toBuffer() // Remove market.toBuffer() - margin account is now global
     ], programId);
 }
 /**

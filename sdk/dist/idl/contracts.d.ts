@@ -5,7 +5,7 @@
  * IDL can be found at `target/idl/contracts.json`.
  */
 export type Contracts = {
-    "address": "AjNFVGrgdphuxJ1oyHkzZKPDBusjd5uogbWH3NXTbzzG";
+    "address": "6UnAEvz8tLBLXM2uDmbYWYKZ6UuAgdxJHTss8HC9h3wf";
     "metadata": {
         "name": "contracts";
         "version": "0.1.0";
@@ -100,16 +100,9 @@ export type Contracts = {
                             {
                                 "kind": "account";
                                 "path": "owner";
-                            },
-                            {
-                                "kind": "account";
-                                "path": "market";
                             }
                         ];
                     };
-                },
-                {
-                    "name": "market";
                 },
                 {
                     "name": "systemProgram";
@@ -487,40 +480,16 @@ export type Contracts = {
             "args": [];
         },
         {
-            "name": "updateFundingPayments";
+            "name": "updateMarketParams";
             "discriminator": [
-                109,
-                213,
-                51,
-                145,
-                107,
-                110,
+                70,
                 117,
-                216
-            ];
-            "accounts": [
-                {
-                    "name": "market";
-                    "writable": true;
-                },
-                {
-                    "name": "authority";
-                    "signer": true;
-                }
-            ];
-            "args": [];
-        },
-        {
-            "name": "updateFundingRate";
-            "discriminator": [
-                201,
-                178,
-                116,
-                212,
-                166,
-                144,
-                72,
-                238
+                202,
+                191,
+                205,
+                174,
+                92,
+                82
             ];
             "accounts": [
                 {
@@ -537,8 +506,28 @@ export type Contracts = {
             ];
             "args": [
                 {
-                    "name": "newFundingRate";
-                    "type": "i64";
+                    "name": "maintenanceMarginRatio";
+                    "type": {
+                        "option": "u64";
+                    };
+                },
+                {
+                    "name": "initialMarginRatio";
+                    "type": {
+                        "option": "u64";
+                    };
+                },
+                {
+                    "name": "fundingInterval";
+                    "type": {
+                        "option": "i64";
+                    };
+                },
+                {
+                    "name": "maxLeverage";
+                    "type": {
+                        "option": "u64";
+                    };
                 }
             ];
         },
@@ -1126,10 +1115,6 @@ export type Contracts = {
                         "type": "pubkey";
                     },
                     {
-                        "name": "perpMarket";
-                        "type": "pubkey";
-                    },
-                    {
                         "name": "marginType";
                         "type": {
                             "defined": {
@@ -1169,10 +1154,6 @@ export type Contracts = {
                     },
                     {
                         "name": "marginAccount";
-                        "type": "pubkey";
-                    },
-                    {
-                        "name": "market";
                         "type": "pubkey";
                     },
                     {

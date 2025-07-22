@@ -5,7 +5,7 @@
  * IDL can be found at `target/idl/mock_oracle.json`.
  */
 export type MockOracle = {
-    "address": "Hw3q138C5dq43dSWiCqrnQXPofVLJxyMEBwZ42m4sbpb";
+    "address": "7ufLxFvoeg7MukzjBEcs6MqpgEV9Yo6gGBXkPei14WpU";
     "metadata": {
         "name": "mockOracle";
         "version": "0.1.0";

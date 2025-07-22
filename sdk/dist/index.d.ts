@@ -83,7 +83,7 @@ export declare class PerpetualSwapSDK {
     /**
      * Get margin account details
      */
-    getMarginAccount(userPublicKey: PublicKey, marketPda: PublicKey): Promise<MarginAccount>;
+    getMarginAccount(userPublicKey: PublicKey): Promise<MarginAccount>;
     /**
      * Get position details
      */
@@ -99,7 +99,7 @@ export declare class PerpetualSwapSDK {
     /**
      * Find the PDA for a margin account
      */
-    findMarginAccountPda(owner: PublicKey, marketPda: PublicKey): Promise<[PublicKey, number]>;
+    findMarginAccountPda(owner: PublicKey): Promise<[PublicKey, number]>;
     /**
      * Find the PDA for a position
      */
@@ -130,6 +130,13 @@ export declare class PerpetualSwapSDK {
     }, authority: PublicKey): Promise<Transaction>;
     buildResumeMarketTransaction(params: {
         market: PublicKey;
+    }, authority: PublicKey): Promise<Transaction>;
+    buildUpdateMarketParamsTransaction(params: {
+        market: PublicKey;
+        maintenanceMarginRatio?: number;
+        initialMarginRatio?: number;
+        fundingInterval?: number;
+        maxLeverage?: number;
     }, authority: PublicKey): Promise<Transaction>;
     buildCloseMarketOrderTransaction(params: {
         market: PublicKey;
