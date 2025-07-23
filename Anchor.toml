@@ -1,17 +1,22 @@
 [toolchain]
+anchor_version = "0.30.1"
 
 [features]
 resolution = true
 skip-lint = false
 
+
 [programs.localnet]
-contracts = "s2zmrr2SqcwCdeAGRiPFftDSV9CRhXqAbRcMgmh4goC"
+contracts = "2nga8op3u3j7Df7wsQv2n5hkRqjEFLjkWGGAfn4aHsfy"
+mock-oracle = "G2EDsqC3igU7f1PgvZgTSLdAMTn9qmwEq7y8Z92hFTCH"
 
 [registry]
 url = "https://api.apr.dev"
 
 [provider]
+# Previous testnet configuration
 cluster = "https://api.testnet.sonic.game/"
+#cluster = "https://api.devnet.solana.com"
 wallet = "~/.config/solana/id.json"
 
 [scripts]

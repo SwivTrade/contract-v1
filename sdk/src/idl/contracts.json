@@ -1,0 +1,1795 @@
+{
+  "address": "6UnAEvz8tLBLXM2uDmbYWYKZ6UuAgdxJHTss8HC9h3wf",
+  "metadata": {
+    "name": "contracts",
+    "version": "0.1.0",
+    "spec": "0.1.0",
+    "description": "Created with Anchor"
+  },
+  "instructions": [
+    {
+      "name": "close_market_order",
+      "discriminator": [
+        161,
+        211,
+        209,
+        73,
+        201,
+        237,
+        81,
+        146
+      ],
+      "accounts": [
+        {
+          "name": "market",
+          "writable": true,
+          "relations": [
+            "position"
+          ]
+        },
+        {
+          "name": "position",
+          "writable": true
+        },
+        {
+          "name": "margin_account",
+          "writable": true
+        },
+        {
+          "name": "trader",
+          "writable": true,
+          "signer": true,
+          "relations": [
+            "position"
+          ]
+        },
+        {
+          "name": "price_update"
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "create_margin_account",
+      "discriminator": [
+        98,
+        114,
+        213,
+        184,
+        129,
+        89,
+        90,
+        185
+      ],
+      "accounts": [
+        {
+          "name": "owner",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "margin_account",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  109,
+                  97,
+                  114,
+                  103,
+                  105,
+                  110,
+                  95,
+                  97,
+                  99,
+                  99,
+                  111,
+                  117,
+                  110,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "owner"
+              }
+            ]
+          }
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "margin_type",
+          "type": {
+            "defined": {
+              "name": "MarginType"
+            }
+          }
+        },
+        {
+          "name": "bump",
+          "type": "u8"
+        }
+      ]
+    },
+    {
+      "name": "deposit_collateral",
+      "discriminator": [
+        156,
+        131,
+        142,
+        116,
+        146,
+        247,
+        162,
+        120
+      ],
+      "accounts": [
+        {
+          "name": "owner",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "margin_account",
+          "writable": true
+        },
+        {
+          "name": "market"
+        },
+        {
+          "name": "user_token_account",
+          "writable": true
+        },
+        {
+          "name": "market_vault",
+          "writable": true
+        },
+        {
+          "name": "mint"
+        },
+        {
+          "name": "token_program",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "amount",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "initialize_market",
+      "discriminator": [
+        35,
+        35,
+        189,
+        193,
+        155,
+        48,
+        170,
+        203
+      ],
+      "accounts": [
+        {
+          "name": "market",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  109,
+                  97,
+                  114,
+                  107,
+                  101,
+                  116
+                ]
+              },
+              {
+                "kind": "arg",
+                "path": "market_symbol"
+              }
+            ]
+          }
+        },
+        {
+          "name": "authority",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "oracle_account"
+        },
+        {
+          "name": "mint",
+          "docs": [
+            "The token mint for the market's collateral"
+          ]
+        },
+        {
+          "name": "vault",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  118,
+                  97,
+                  117,
+                  108,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "market"
+              }
+            ]
+          }
+        },
+        {
+          "name": "token_program",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "market_symbol",
+          "type": "string"
+        },
+        {
+          "name": "initial_funding_rate",
+          "type": "i64"
+        },
+        {
+          "name": "funding_interval",
+          "type": "i64"
+        },
+        {
+          "name": "maintenance_margin_ratio",
+          "type": "u64"
+        },
+        {
+          "name": "initial_margin_ratio",
+          "type": "u64"
+        },
+        {
+          "name": "max_leverage",
+          "type": "u64"
+        },
+        {
+          "name": "liquidation_fee_ratio",
+          "type": "u64"
+        },
+        {
+          "name": "bump",
+          "type": "u8"
+        }
+      ]
+    },
+    {
+      "name": "liquidate_market_order",
+      "discriminator": [
+        53,
+        184,
+        12,
+        203,
+        182,
+        112,
+        199,
+        146
+      ],
+      "accounts": [
+        {
+          "name": "market",
+          "writable": true,
+          "relations": [
+            "position"
+          ]
+        },
+        {
+          "name": "position",
+          "writable": true
+        },
+        {
+          "name": "margin_account",
+          "writable": true
+        },
+        {
+          "name": "liquidator",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "price_update"
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "pause_market",
+      "discriminator": [
+        216,
+        238,
+        4,
+        164,
+        65,
+        11,
+        162,
+        91
+      ],
+      "accounts": [
+        {
+          "name": "market",
+          "writable": true
+        },
+        {
+          "name": "authority",
+          "signer": true,
+          "relations": [
+            "market"
+          ]
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "place_market_order",
+      "discriminator": [
+        90,
+        118,
+        192,
+        252,
+        192,
+        99,
+        39,
+        145
+      ],
+      "accounts": [
+        {
+          "name": "market",
+          "writable": true
+        },
+        {
+          "name": "position",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  111,
+                  115,
+                  105,
+                  116,
+                  105,
+                  111,
+                  110
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "market"
+              },
+              {
+                "kind": "account",
+                "path": "trader"
+              },
+              {
+                "kind": "arg",
+                "path": "uid"
+              }
+            ]
+          }
+        },
+        {
+          "name": "margin_account",
+          "writable": true
+        },
+        {
+          "name": "trader",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "price_update"
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "side",
+          "type": {
+            "defined": {
+              "name": "Side"
+            }
+          }
+        },
+        {
+          "name": "size",
+          "type": "u64"
+        },
+        {
+          "name": "leverage",
+          "type": "u64"
+        },
+        {
+          "name": "position_bump",
+          "type": "u8"
+        },
+        {
+          "name": "uid",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "resume_market",
+      "discriminator": [
+        198,
+        120,
+        104,
+        87,
+        44,
+        103,
+        108,
+        143
+      ],
+      "accounts": [
+        {
+          "name": "market",
+          "writable": true
+        },
+        {
+          "name": "authority",
+          "signer": true,
+          "relations": [
+            "market"
+          ]
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "update_market_params",
+      "discriminator": [
+        70,
+        117,
+        202,
+        191,
+        205,
+        174,
+        92,
+        82
+      ],
+      "accounts": [
+        {
+          "name": "market",
+          "writable": true
+        },
+        {
+          "name": "authority",
+          "signer": true,
+          "relations": [
+            "market"
+          ]
+        }
+      ],
+      "args": [
+        {
+          "name": "maintenance_margin_ratio",
+          "type": {
+            "option": "u64"
+          }
+        },
+        {
+          "name": "initial_margin_ratio",
+          "type": {
+            "option": "u64"
+          }
+        },
+        {
+          "name": "funding_interval",
+          "type": {
+            "option": "i64"
+          }
+        },
+        {
+          "name": "max_leverage",
+          "type": {
+            "option": "u64"
+          }
+        }
+      ]
+    },
+    {
+      "name": "withdraw_collateral",
+      "discriminator": [
+        115,
+        135,
+        168,
+        106,
+        139,
+        214,
+        138,
+        150
+      ],
+      "accounts": [
+        {
+          "name": "owner",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "margin_account",
+          "writable": true
+        },
+        {
+          "name": "market"
+        },
+        {
+          "name": "user_token_account",
+          "writable": true
+        },
+        {
+          "name": "market_vault",
+          "writable": true
+        },
+        {
+          "name": "mint"
+        },
+        {
+          "name": "token_program",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        }
+      ],
+      "args": [
+        {
+          "name": "amount",
+          "type": "u64"
+        }
+      ]
+    }
+  ],
+  "accounts": [
+    {
+      "name": "MarginAccount",
+      "discriminator": [
+        133,
+        220,
+        173,
+        213,
+        179,
+        211,
+        43,
+        238
+      ]
+    },
+    {
+      "name": "Market",
+      "discriminator": [
+        219,
+        190,
+        213,
+        55,
+        0,
+        227,
+        198,
+        154
+      ]
+    },
+    {
+      "name": "Position",
+      "discriminator": [
+        170,
+        188,
+        143,
+        228,
+        122,
+        64,
+        247,
+        208
+      ]
+    }
+  ],
+  "events": [
+    {
+      "name": "CollateralDeposited",
+      "discriminator": [
+        244,
+        62,
+        77,
+        11,
+        135,
+        112,
+        61,
+        96
+      ]
+    },
+    {
+      "name": "CollateralWithdrawn",
+      "discriminator": [
+        51,
+        224,
+        133,
+        106,
+        74,
+        173,
+        72,
+        82
+      ]
+    },
+    {
+      "name": "FundingRateUpdatedEvent",
+      "discriminator": [
+        223,
+        34,
+        205,
+        106,
+        34,
+        251,
+        158,
+        76
+      ]
+    },
+    {
+      "name": "FundingUpdatedEvent",
+      "discriminator": [
+        30,
+        80,
+        188,
+        77,
+        115,
+        123,
+        191,
+        126
+      ]
+    },
+    {
+      "name": "MarginAccountCreated",
+      "discriminator": [
+        157,
+        214,
+        66,
+        63,
+        149,
+        164,
+        160,
+        119
+      ]
+    },
+    {
+      "name": "MarginAdjustedEvent",
+      "discriminator": [
+        215,
+        144,
+        150,
+        101,
+        181,
+        168,
+        194,
+        93
+      ]
+    },
+    {
+      "name": "MarketInitializedEvent",
+      "discriminator": [
+        70,
+        173,
+        96,
+        202,
+        100,
+        143,
+        45,
+        25
+      ]
+    },
+    {
+      "name": "MarketParamsUpdatedEvent",
+      "discriminator": [
+        159,
+        73,
+        27,
+        179,
+        194,
+        219,
+        7,
+        230
+      ]
+    },
+    {
+      "name": "MarketPausedEvent",
+      "discriminator": [
+        188,
+        195,
+        34,
+        16,
+        53,
+        37,
+        64,
+        100
+      ]
+    },
+    {
+      "name": "MarketResumedEvent",
+      "discriminator": [
+        34,
+        56,
+        120,
+        78,
+        71,
+        228,
+        93,
+        131
+      ]
+    },
+    {
+      "name": "OrderCancelledEvent",
+      "discriminator": [
+        200,
+        73,
+        179,
+        145,
+        247,
+        176,
+        10,
+        101
+      ]
+    },
+    {
+      "name": "OrderFilledEvent",
+      "discriminator": [
+        218,
+        97,
+        153,
+        209,
+        56,
+        56,
+        251,
+        133
+      ]
+    },
+    {
+      "name": "OrderPlacedEvent",
+      "discriminator": [
+        245,
+        198,
+        202,
+        247,
+        110,
+        231,
+        254,
+        156
+      ]
+    },
+    {
+      "name": "PositionClosedEvent",
+      "discriminator": [
+        76,
+        129,
+        10,
+        225,
+        238,
+        51,
+        158,
+        126
+      ]
+    },
+    {
+      "name": "PositionLiquidatedEvent",
+      "discriminator": [
+        70,
+        153,
+        226,
+        254,
+        176,
+        139,
+        225,
+        72
+      ]
+    },
+    {
+      "name": "PositionOpenedEvent",
+      "discriminator": [
+        163,
+        1,
+        92,
+        149,
+        138,
+        188,
+        177,
+        23
+      ]
+    }
+  ],
+  "errors": [
+    {
+      "code": 6000,
+      "name": "MathOverflow",
+      "msg": "Math overflow occurred"
+    },
+    {
+      "code": 6001,
+      "name": "Unauthorized",
+      "msg": "Operation not authorized"
+    },
+    {
+      "code": 6002,
+      "name": "MarketInactive",
+      "msg": "Market is currently inactive"
+    },
+    {
+      "code": 6003,
+      "name": "PositionClosed",
+      "msg": "Position is already closed"
+    },
+    {
+      "code": 6004,
+      "name": "InvalidOracleAccount",
+      "msg": "Provided oracle account is invalid"
+    },
+    {
+      "code": 6005,
+      "name": "StaleOraclePrice",
+      "msg": "Oracle price is too old"
+    },
+    {
+      "code": 6006,
+      "name": "PriceConfidenceTooLow",
+      "msg": "Price confidence interval exceeds acceptable threshold"
+    },
+    {
+      "code": 6007,
+      "name": "PositionNotLiquidatable",
+      "msg": "Position does not meet liquidation criteria"
+    },
+    {
+      "code": 6008,
+      "name": "InvalidOrderSize",
+      "msg": "Order size is invalid"
+    },
+    {
+      "code": 6009,
+      "name": "InvalidOrderPrice",
+      "msg": "Order price is invalid"
+    },
+    {
+      "code": 6010,
+      "name": "LeverageTooHigh",
+      "msg": "Leverage exceeds maximum allowed"
+    },
+    {
+      "code": 6011,
+      "name": "InsufficientMargin",
+      "msg": "Insufficient margin provided"
+    },
+    {
+      "code": 6012,
+      "name": "InvalidParameter",
+      "msg": "Invalid parameter supplied"
+    },
+    {
+      "code": 6013,
+      "name": "MarketAlreadyPaused",
+      "msg": "Market is already paused"
+    },
+    {
+      "code": 6014,
+      "name": "MarketAlreadyActive",
+      "msg": "Market is already active"
+    },
+    {
+      "code": 6015,
+      "name": "OrderNotActive",
+      "msg": "Order is not active"
+    },
+    {
+      "code": 6016,
+      "name": "InvalidMarketSymbol",
+      "msg": "Invalid market symbol"
+    },
+    {
+      "code": 6017,
+      "name": "InvalidFundingRate",
+      "msg": "Invalid funding rate"
+    },
+    {
+      "code": 6018,
+      "name": "InvalidFundingInterval",
+      "msg": "Invalid funding interval"
+    },
+    {
+      "code": 6019,
+      "name": "InvalidMarginRatio",
+      "msg": "Invalid margin ratio"
+    },
+    {
+      "code": 6020,
+      "name": "InvalidLeverage",
+      "msg": "Invalid leverage value"
+    },
+    {
+      "code": 6021,
+      "name": "InsufficientLiquidity",
+      "msg": "Insufficient liquidity in market"
+    },
+    {
+      "code": 6022,
+      "name": "PositionSizeTooSmall",
+      "msg": "Position size is below minimum"
+    },
+    {
+      "code": 6023,
+      "name": "PositionSizeTooLarge",
+      "msg": "Position size exceeds maximum"
+    },
+    {
+      "code": 6024,
+      "name": "InsufficientCollateral",
+      "msg": "Insufficient collateral for this operation"
+    },
+    {
+      "code": 6025,
+      "name": "InvalidLeverageRange",
+      "msg": "Leverage is outside allowed range"
+    },
+    {
+      "code": 6026,
+      "name": "OrderNotFound",
+      "msg": "Order not found"
+    },
+    {
+      "code": 6027,
+      "name": "PositionLiquidated",
+      "msg": "Position has been liquidated"
+    },
+    {
+      "code": 6028,
+      "name": "MarginCallRequired",
+      "msg": "Margin call required before further operations"
+    },
+    {
+      "code": 6029,
+      "name": "WithdrawalBelowMaintenanceMargin",
+      "msg": "Withdrawal would put account below maintenance margin"
+    },
+    {
+      "code": 6030,
+      "name": "DepositTooSmall",
+      "msg": "Deposit amount is too small"
+    },
+    {
+      "code": 6031,
+      "name": "WithdrawalTooSmall",
+      "msg": "Withdrawal amount is too small"
+    },
+    {
+      "code": 6032,
+      "name": "InvalidPosition",
+      "msg": "Invalid position provided"
+    },
+    {
+      "code": 6033,
+      "name": "WithdrawalExceedsAvailableMargin",
+      "msg": "Withdrawal exceeds available margin"
+    },
+    {
+      "code": 6034,
+      "name": "InvalidVault",
+      "msg": "Invalid vault provided"
+    }
+  ],
+  "types": [
+    {
+      "name": "CollateralDeposited",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "owner",
+            "type": "pubkey"
+          },
+          {
+            "name": "margin_account",
+            "type": "pubkey"
+          },
+          {
+            "name": "amount",
+            "type": "u64"
+          },
+          {
+            "name": "timestamp",
+            "type": "i64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "CollateralWithdrawn",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "owner",
+            "type": "pubkey"
+          },
+          {
+            "name": "margin_account",
+            "type": "pubkey"
+          },
+          {
+            "name": "amount",
+            "type": "u64"
+          },
+          {
+            "name": "timestamp",
+            "type": "i64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "FundingRateUpdatedEvent",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "market",
+            "type": "pubkey"
+          },
+          {
+            "name": "authority",
+            "type": "pubkey"
+          },
+          {
+            "name": "old_funding_rate",
+            "type": "i64"
+          },
+          {
+            "name": "new_funding_rate",
+            "type": "i64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "FundingUpdatedEvent",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "market",
+            "type": "pubkey"
+          },
+          {
+            "name": "funding_rate",
+            "type": "i64"
+          },
+          {
+            "name": "intervals",
+            "type": "i64"
+          },
+          {
+            "name": "timestamp",
+            "type": "i64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "MarginAccount",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "owner",
+            "type": "pubkey"
+          },
+          {
+            "name": "margin_type",
+            "type": {
+              "defined": {
+                "name": "MarginType"
+              }
+            }
+          },
+          {
+            "name": "collateral",
+            "type": "u64"
+          },
+          {
+            "name": "allocated_margin",
+            "type": "u64"
+          },
+          {
+            "name": "positions",
+            "type": {
+              "vec": "pubkey"
+            }
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "MarginAccountCreated",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "owner",
+            "type": "pubkey"
+          },
+          {
+            "name": "margin_account",
+            "type": "pubkey"
+          },
+          {
+            "name": "margin_type",
+            "type": {
+              "defined": {
+                "name": "MarginType"
+              }
+            }
+          },
+          {
+            "name": "timestamp",
+            "type": "i64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "MarginAdjustedEvent",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "market",
+            "type": "pubkey"
+          },
+          {
+            "name": "position",
+            "type": "pubkey"
+          },
+          {
+            "name": "trader",
+            "type": "pubkey"
+          },
+          {
+            "name": "margin_change",
+            "type": "i64"
+          },
+          {
+            "name": "new_collateral",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "MarginType",
+      "type": {
+        "kind": "enum",
+        "variants": [
+          {
+            "name": "Isolated"
+          },
+          {
+            "name": "Cross"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Market",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "authority",
+            "type": "pubkey"
+          },
+          {
+            "name": "market_symbol",
+            "type": "string"
+          },
+          {
+            "name": "base_asset_reserve",
+            "type": "u64"
+          },
+          {
+            "name": "quote_asset_reserve",
+            "type": "u64"
+          },
+          {
+            "name": "funding_rate",
+            "type": "i64"
+          },
+          {
+            "name": "last_funding_time",
+            "type": "i64"
+          },
+          {
+            "name": "funding_interval",
+            "type": "i64"
+          },
+          {
+            "name": "maintenance_margin_ratio",
+            "type": "u64"
+          },
+          {
+            "name": "initial_margin_ratio",
+            "type": "u64"
+          },
+          {
+            "name": "liquidation_fee_ratio",
+            "type": "u64"
+          },
+          {
+            "name": "fee_pool",
+            "type": "u64"
+          },
+          {
+            "name": "insurance_fund",
+            "type": "u64"
+          },
+          {
+            "name": "max_leverage",
+            "type": "u64"
+          },
+          {
+            "name": "oracle",
+            "type": "pubkey"
+          },
+          {
+            "name": "vault",
+            "type": "pubkey"
+          },
+          {
+            "name": "is_active",
+            "type": "bool"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "MarketInitializedEvent",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "market",
+            "type": "pubkey"
+          },
+          {
+            "name": "authority",
+            "type": "pubkey"
+          },
+          {
+            "name": "market_symbol",
+            "type": "string"
+          },
+          {
+            "name": "funding_rate",
+            "type": "i64"
+          },
+          {
+            "name": "funding_interval",
+            "type": "i64"
+          },
+          {
+            "name": "maintenance_margin_ratio",
+            "type": "u64"
+          },
+          {
+            "name": "initial_margin_ratio",
+            "type": "u64"
+          },
+          {
+            "name": "max_leverage",
+            "type": "u64"
+          },
+          {
+            "name": "liquidation_fee_ratio",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "MarketParamsUpdatedEvent",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "market",
+            "type": "pubkey"
+          },
+          {
+            "name": "authority",
+            "type": "pubkey"
+          },
+          {
+            "name": "maintenance_margin_ratio",
+            "type": "u64"
+          },
+          {
+            "name": "initial_margin_ratio",
+            "type": "u64"
+          },
+          {
+            "name": "funding_interval",
+            "type": "i64"
+          },
+          {
+            "name": "max_leverage",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "MarketPausedEvent",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "market",
+            "type": "pubkey"
+          },
+          {
+            "name": "authority",
+            "type": "pubkey"
+          }
+        ]
+      }
+    },
+    {
+      "name": "MarketResumedEvent",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "market",
+            "type": "pubkey"
+          },
+          {
+            "name": "authority",
+            "type": "pubkey"
+          }
+        ]
+      }
+    },
+    {
+      "name": "OrderCancelledEvent",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "market",
+            "type": "pubkey"
+          },
+          {
+            "name": "order",
+            "type": "pubkey"
+          },
+          {
+            "name": "trader",
+            "type": "pubkey"
+          }
+        ]
+      }
+    },
+    {
+      "name": "OrderFilledEvent",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "market",
+            "type": "pubkey"
+          },
+          {
+            "name": "position",
+            "type": "pubkey"
+          },
+          {
+            "name": "trader",
+            "type": "pubkey"
+          },
+          {
+            "name": "side",
+            "type": {
+              "defined": {
+                "name": "Side"
+              }
+            }
+          },
+          {
+            "name": "price",
+            "type": "u64"
+          },
+          {
+            "name": "size",
+            "type": "u64"
+          },
+          {
+            "name": "filled_size",
+            "type": "u64"
+          },
+          {
+            "name": "timestamp",
+            "type": "i64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "OrderPlacedEvent",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "market",
+            "type": "pubkey"
+          },
+          {
+            "name": "position",
+            "type": "pubkey"
+          },
+          {
+            "name": "trader",
+            "type": "pubkey"
+          },
+          {
+            "name": "side",
+            "type": {
+              "defined": {
+                "name": "Side"
+              }
+            }
+          },
+          {
+            "name": "order_type",
+            "type": {
+              "defined": {
+                "name": "OrderType"
+              }
+            }
+          },
+          {
+            "name": "price",
+            "type": "u64"
+          },
+          {
+            "name": "size",
+            "type": "u64"
+          },
+          {
+            "name": "leverage",
+            "type": "u64"
+          },
+          {
+            "name": "timestamp",
+            "type": "i64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "OrderType",
+      "type": {
+        "kind": "enum",
+        "variants": [
+          {
+            "name": "Market"
+          },
+          {
+            "name": "Limit"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Position",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "trader",
+            "type": "pubkey"
+          },
+          {
+            "name": "market",
+            "type": "pubkey"
+          },
+          {
+            "name": "order_type",
+            "type": {
+              "defined": {
+                "name": "OrderType"
+              }
+            }
+          },
+          {
+            "name": "side",
+            "type": {
+              "defined": {
+                "name": "Side"
+              }
+            }
+          },
+          {
+            "name": "size",
+            "type": "u64"
+          },
+          {
+            "name": "filled_size",
+            "type": "u64"
+          },
+          {
+            "name": "price",
+            "type": "u64"
+          },
+          {
+            "name": "collateral",
+            "type": "u64"
+          },
+          {
+            "name": "entry_price",
+            "type": "u64"
+          },
+          {
+            "name": "entry_funding_rate",
+            "type": "i64"
+          },
+          {
+            "name": "leverage",
+            "type": "u64"
+          },
+          {
+            "name": "realized_pnl",
+            "type": "i64"
+          },
+          {
+            "name": "last_funding_payment_time",
+            "type": "i64"
+          },
+          {
+            "name": "last_cumulative_funding",
+            "type": "i64"
+          },
+          {
+            "name": "is_open",
+            "type": "bool"
+          },
+          {
+            "name": "created_at",
+            "type": "i64"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "PositionClosedEvent",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "market",
+            "type": "pubkey"
+          },
+          {
+            "name": "position",
+            "type": "pubkey"
+          },
+          {
+            "name": "trader",
+            "type": "pubkey"
+          },
+          {
+            "name": "side",
+            "type": {
+              "defined": {
+                "name": "Side"
+              }
+            }
+          },
+          {
+            "name": "size",
+            "type": "u64"
+          },
+          {
+            "name": "collateral",
+            "type": "u64"
+          },
+          {
+            "name": "entry_price",
+            "type": "u64"
+          },
+          {
+            "name": "exit_price",
+            "type": "u64"
+          },
+          {
+            "name": "realized_pnl",
+            "type": "i64"
+          },
+          {
+            "name": "margin_type",
+            "type": {
+              "defined": {
+                "name": "MarginType"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "PositionLiquidatedEvent",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "market",
+            "type": "pubkey"
+          },
+          {
+            "name": "position",
+            "type": "pubkey"
+          },
+          {
+            "name": "trader",
+            "type": "pubkey"
+          },
+          {
+            "name": "side",
+            "type": {
+              "defined": {
+                "name": "Side"
+              }
+            }
+          },
+          {
+            "name": "size",
+            "type": "u64"
+          },
+          {
+            "name": "collateral",
+            "type": "u64"
+          },
+          {
+            "name": "entry_price",
+            "type": "u64"
+          },
+          {
+            "name": "exit_price",
+            "type": "u64"
+          },
+          {
+            "name": "liquidator",
+            "type": "pubkey"
+          },
+          {
+            "name": "liquidation_fee",
+            "type": "u64"
+          },
+          {
+            "name": "liquidator_fee",
+            "type": "u64"
+          },
+          {
+            "name": "insurance_fund_fee",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "PositionOpenedEvent",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "market",
+            "type": "pubkey"
+          },
+          {
+            "name": "position",
+            "type": "pubkey"
+          },
+          {
+            "name": "trader",
+            "type": "pubkey"
+          },
+          {
+            "name": "side",
+            "type": {
+              "defined": {
+                "name": "Side"
+              }
+            }
+          },
+          {
+            "name": "size",
+            "type": "u64"
+          },
+          {
+            "name": "collateral",
+            "type": "u64"
+          },
+          {
+            "name": "entry_price",
+            "type": "u64"
+          },
+          {
+            "name": "leverage",
+            "type": "u64"
+          },
+          {
+            "name": "liquidation_price",
+            "type": "u64"
+          },
+          {
+            "name": "margin_type",
+            "type": {
+              "defined": {
+                "name": "MarginType"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "Side",
+      "type": {
+        "kind": "enum",
+        "variants": [
+          {
+            "name": "Long"
+          },
+          {
+            "name": "Short"
+          }
+        ]
+      }
+    }
+  ]
+}

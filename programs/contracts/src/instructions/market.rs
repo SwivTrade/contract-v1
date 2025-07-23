@@ -1,4 +1,5 @@
 use anchor_lang::prelude::*;
+use anchor_spl::token::{Mint, Token, TokenAccount};
 use crate::{errors::ErrorCode, events::*, Market};
 
 #[derive(Accounts)]
@@ -9,13 +10,14 @@ use crate::{errors::ErrorCode, events::*, Market};
     maintenance_margin_ratio: u64,
     initial_margin_ratio: u64,
     max_leverage: u64,
+    liquidation_fee_ratio: u64,
     bump: u8
 )]
 pub struct InitializeMarket<'info> {
     #[account(
         init,
         payer = authority,
-        space = 256, // Use constant for exact size
+        space = Market::SPACE,
         seeds = [b"market", market_symbol.as_bytes()],
         bump
     )]
@@ -24,7 +26,19 @@ pub struct InitializeMarket<'info> {
     pub authority: Signer<'info>,
     /// CHECK: This is the Pyth price account, stored in market.oracle
     pub oracle_account: AccountInfo<'info>,
-    pub system_program: Program<'info, System>,
+    /// The token mint for the market's collateral
+    pub mint: Account<'info, Mint>,
+    #[account(
+        init,
+        payer = authority,
+        token::mint = mint,
+        token::authority = market,
+        seeds = [b"vault", market.key().as_ref()],
+        bump
+    )]
+    pub vault: Account<'info, TokenAccount>,
+    pub token_program: Program<'info, Token>,
+    pub system_program: Program<'info, System>
 }
 
 pub fn initialize_market(
@@ -35,6 +49,7 @@ pub fn initialize_market(
     maintenance_margin_ratio: u64,
     initial_margin_ratio: u64,
     max_leverage: u64,
+    liquidation_fee_ratio: u64,
     bump: u8,
 ) -> Result<()> {
     // Validate inputs
@@ -49,6 +64,7 @@ pub fn initialize_market(
         ErrorCode::InvalidMarginRatio
     );
     require!(max_leverage > 0, ErrorCode::InvalidLeverage);
+    require!(liquidation_fee_ratio > 0 && liquidation_fee_ratio < 10000, ErrorCode::InvalidParameter);
 
     let market = &mut ctx.accounts.market;
     let authority = &ctx.accounts.authority;
@@ -57,17 +73,19 @@ pub fn initialize_market(
     // Initialize market
     market.authority = authority.key();
     market.market_symbol = market_symbol.clone();
-    market.base_asset_reserve = 0;
+    market.base_asset_reserve = 1_000_000_000; // Start with 1 billion base units
     market.quote_asset_reserve = 0;
     market.funding_rate = initial_funding_rate;
     market.last_funding_time = clock.unix_timestamp;
     market.funding_interval = funding_interval;
     market.maintenance_margin_ratio = maintenance_margin_ratio;
     market.initial_margin_ratio = initial_margin_ratio;
+    market.liquidation_fee_ratio = liquidation_fee_ratio;
     market.fee_pool = 0;
     market.insurance_fund = 0;
     market.max_leverage = max_leverage;
     market.oracle = ctx.accounts.oracle_account.key();
+    market.vault = ctx.accounts.vault.key();
     market.is_active = true;
     market.bump = bump;
 
@@ -81,6 +99,7 @@ pub fn initialize_market(
         maintenance_margin_ratio,
         initial_margin_ratio,
         max_leverage,
+        liquidation_fee_ratio,
     });
 
     Ok(())
@@ -182,22 +201,3 @@ pub fn resume_market(ctx: Context<ResumeMarket>) -> Result<()> {
     Ok(())
 }
 
-// Define Market::SPACE constant in state/mod.rs for accurate allocation
-impl Market {
-    pub const SPACE: usize = 8 + // discriminator
-        32 + // authority: Pubkey
-        4 + 64 + // market_symbol: String (4 bytes len + max 64 chars)
-        8 + // base_asset_reserve: u64
-        8 + // quote_asset_reserve: u64
-        8 + // funding_rate: i64
-        8 + // last_funding_time: i64
-        8 + // funding_interval: i64
-        8 + // maintenance_margin_ratio: u64
-        8 + // initial_margin_ratio: u64
-        8 + // fee_pool: u64
-        8 + // insurance_fund: u64
-        8 + // max_leverage: u64
-        32 + // oracle: Pubkey
-        1 + // is_active: bool
-        1; // bump: u8
-}

@@ -1,5 +1,5 @@
 use anchor_lang::prelude::*;
-use crate::{Side, OrderType};
+use crate::{Side, OrderType, MarginType};
 
 // Market Events
 #[event]
@@ -12,6 +12,7 @@ pub struct MarketInitializedEvent {
     pub maintenance_margin_ratio: u64,
     pub initial_margin_ratio: u64,
     pub max_leverage: u64,
+    pub liquidation_fee_ratio: u64,
 }
 
 #[event]
@@ -65,6 +66,7 @@ pub struct PositionOpenedEvent {
     pub entry_price: u64,
     pub leverage: u64,
     pub liquidation_price: u64,
+    pub margin_type: MarginType,
 }
 
 #[event]
@@ -78,6 +80,7 @@ pub struct PositionClosedEvent {
     pub entry_price: u64,
     pub exit_price: u64,
     pub realized_pnl: i64,
+    pub margin_type: MarginType,
 }
 
 #[event]
@@ -85,11 +88,15 @@ pub struct PositionLiquidatedEvent {
     pub market: Pubkey,
     pub position: Pubkey,
     pub trader: Pubkey,
-    pub liquidator: Pubkey,
+    pub side: Side,
     pub size: u64,
     pub collateral: u64,
-    pub liquidation_price: u64,
+    pub entry_price: u64,
+    pub exit_price: u64,
+    pub liquidator: Pubkey,
     pub liquidation_fee: u64,
+    pub liquidator_fee: u64,
+    pub insurance_fund_fee: u64,
 }
 
 #[event]
@@ -105,24 +112,26 @@ pub struct MarginAdjustedEvent {
 #[event]
 pub struct OrderPlacedEvent {
     pub market: Pubkey,
-    pub order: Pubkey,
+    pub position: Pubkey,
     pub trader: Pubkey,
     pub side: Side,
     pub order_type: OrderType,
     pub price: u64,
     pub size: u64,
     pub leverage: u64,
+    pub timestamp: i64,
 }
 
 #[event]
 pub struct OrderFilledEvent {
     pub market: Pubkey,
-    pub order: Pubkey,
+    pub position: Pubkey,
     pub trader: Pubkey,
     pub side: Side,
     pub price: u64,
     pub size: u64,
     pub filled_size: u64,
+    pub timestamp: i64,
 }
 
 #[event]
@@ -153,6 +162,6 @@ pub struct CollateralWithdrawn {
 pub struct MarginAccountCreated {
     pub owner: Pubkey,
     pub margin_account: Pubkey,
-    pub market: Pubkey,
+    pub margin_type: MarginType,
     pub timestamp: i64,
 }
