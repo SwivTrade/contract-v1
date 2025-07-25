@@ -1,37 +1,81 @@
-# Perpetual Swap SDK
+# PerpetualSwap SDK
 
-A TypeScript SDK for interacting with the Solana Perpetual Swap Protocol.
+A TypeScript SDK for interacting with the PerpetualSwap protocol on multiple networks.
+
+## Features
+
+- Support for multiple networks (Sonic Testnet, Solana Devnet, Localnet)
+- Admin operations (market initialization, oracle management)
+- User operations (position management, collateral operations)
+- Transaction building for client-side signing
+- Type-safe interactions with the protocol
+
+## Network Support
+
+The SDK supports the following networks:
+
+| Network | RPC URL | Contracts Program ID | Mock Oracle Program ID |
+|---------|---------|---------------------|----------------------|
+| Sonic Testnet | `https://api.testnet.sonic.game/` | `9wdJq5R7VUuXDrAZBnXfDqc1vW6nwAW5aYneMKiryppz` | `F7r5C99gqsAXgsFJjKQD2KuEGVXgsXaYJgG9nn43cdfk` |
+| Solana Devnet | `https://api.devnet.solana.com` | `9wdJq5R7VUuXDrAZBnXfDqc1vW6nwAW5aYneMKiryppz` | `F7r5C99gqsAXgsFJjKQD2KuEGVXgsXaYJgG9nn43cdfk` |
+| Localnet | `http://localhost:8899` | `2nga8op3u3j7Df7wsQv2n5hkRqjEFLjkWGGAfn4cHsfy` | `G2EDsqC3igU7f1PgvZgTSLdAMTn9qmwEq7y8Z92hFTCH` |
 
 ## Installation
 
 ```bash
-npm install @swiv-sdk/perpetual-swap-sdk
-# or
-yarn add @swiv-sdk/perpetual-swap-sdk
-# or
-pnpm add @swiv-sdk/perpetual-swap-sdk
+npm install @perpetualswap/sdk
 ```
 
-## Usage
+## Basic Usage
+
+### 1. Initialize SDK for a specific network
 
 ```typescript
-import { Connection, PublicKey } from '@solana/web3.js';
-import { Wallet } from '@coral-xyz/anchor';
-import { PerpetualSwapSDK } from '@swiv-sdk/perpetual-swap-sdk';
+import { PerpetualSwapSDK, Network } from '@perpetualswap/sdk';
 
-// Initialize the SDK
-const connection = new Connection('https://api.devnet.solana.com', 'confirmed');
-const wallet = new Wallet(/* your keypair */);
-const sdk = new PerpetualSwapSDK(connection, wallet);
+// For Sonic Testnet
+const sdk = PerpetualSwapSDK.createForNetwork(Network.SONIC_TESTNET);
 
-// Initialize a market
+// For Solana Devnet
+const sdk = PerpetualSwapSDK.createForNetwork(Network.SOLANA_DEVNET);
+
+// For Localnet
+const sdk = PerpetualSwapSDK.createForNetwork(Network.LOCALNET);
+```
+
+### 2. Initialize SDK with wallet for admin operations
+
+```typescript
+import { PerpetualSwapSDK, Network } from '@perpetualswap/sdk';
+import { Connection, Keypair } from '@solana/web3.js';
+
+const keypair = Keypair.generate();
+const connection = new Connection('https://api.testnet.sonic.game/', 'confirmed');
+
+const sdk = new PerpetualSwapSDK(connection, wallet, keypair, Network.SONIC_TESTNET);
+```
+
+### 3. Get network information
+
+```typescript
+console.log('Network:', sdk.getNetwork());
+console.log('RPC URL:', sdk.getNetworkConfig().rpcUrl);
+console.log('Contracts Program ID:', sdk.getContractsProgramId().toBase58());
+console.log('Mock Oracle Program ID:', sdk.getMockOracleProgramId().toBase58());
+```
+
+## Admin Operations
+
+### Initialize Market
+
+```typescript
 const market = await sdk.initializeMarket({
-  marketSymbol: 'SOL-PERP',
+  marketSymbol: "SOL-PERP",
   initialFundingRate: 0,
   fundingInterval: 3600,
-  maintenanceMarginRatio: 100, // 1%
-  initialMarginRatio: 200, // 2%
-  maxLeverage: 50, // 50x leverage
+  maintenanceMarginRatio: 500, // 5%
+  initialMarginRatio: 1000, // 10%
+  maxLeverage: 10,
   oracleAccount: new PublicKey('your-oracle-account'),
   mint: new PublicKey('your-token-mint')
 });
@@ -51,23 +95,23 @@ const marketDetails = await sdk.getMarket(market.authority);
 const allMarkets = await sdk.getAllMarkets();
 console.log('Available markets:', allMarkets.map(m => m.marketSymbol));
 
-// Create a global margin account (used across all markets)
+// Create a margin account
 const marginAccount = await sdk.createMarginAccount({
-  marginType: { isolated: {} }, // or { cross: {} }
+  market: market.authority,
   bump: 0 // This will be calculated
 });
 
-// Deposit collateral to the global margin account
+// Deposit collateral
 await sdk.depositCollateral({
   marginAccount: marginAccount,
-  market: market.authority, // Specify which market's vault to use
+  market: market.authority,
   amount: new BN(1000000) // 1 token with 6 decimals
 });
 
-// Withdraw collateral from the global margin account
+// Withdraw collateral
 await sdk.withdrawCollateral({
   marginAccount: marginAccount,
-  market: market.authority, // Specify which market's vault to use
+  market: market.authority,
   amount: new BN(500000) // 0.5 token with 6 decimals
 });
 
@@ -124,13 +168,61 @@ await sdk.createMarginAccount({ market: marketKey, marginType: { isolated: {} } 
 await sdk.createMarginAccount({ marginType: { isolated: {} } });
 ```
 
-## API Reference
+## User Operations
 
-### `PerpetualSwapSDK`
+### Build Transaction to Create Margin Account
 
-The main class for interacting with the Perpetual Swap Protocol.
+```typescript
+const tx = await sdk.buildCreateMarginAccountTransaction({
+  market: marketPda,
+  marginType: { isolated: {} }
+}, userPublicKey);
 
-#### Constructor
+// Send transaction
+await provider.sendAndConfirm(tx);
+```
+
+### Build Transaction to Deposit Collateral
+
+```typescript
+const tx = await sdk.buildDepositCollateralTransaction({
+  marginAccount: marginAccountPda,
+  market: marketPda,
+  userTokenAccount,
+  vault: marketVaultPda,
+  mint: tokenMint,
+  amount: new BN(50_000_000) // 50 tokens
+}, userPublicKey);
+
+await provider.sendAndConfirm(tx);
+```
+
+### Build Transaction to Place Market Order
+
+```typescript
+const tx = await sdk.buildPlaceMarketOrderTransaction({
+  market: marketPda,
+  marginAccount: marginAccountPda,
+  side: 'long',
+  size: new BN(100_000), // 0.1 tokens
+  leverage: new BN(5),
+  oracleAccount: mockOraclePda
+}, userPublicKey);
+
+await provider.sendAndConfirm(tx);
+```
+
+## Read Operations
+
+### Get Market Details
+
+```typescript
+const market = await sdk.getMarket(marketPda);
+console.log('Market Symbol:', market.marketSymbol);
+console.log('Max Leverage:', market.maxLeverage.toNumber());
+```
+
+### Get Margin Account
 
 ```typescript
 constructor(connection: Connection, wallet: Wallet)
@@ -141,12 +233,10 @@ constructor(connection: Connection, wallet: Wallet)
 - `initializeMarket(params: InitializeMarketParams): Promise<Market>` - Returns the complete market object
 - `getMarket(marketAddress: PublicKey): Promise<Market>`
 - `getAllMarkets(): Promise<Market[]>` - Returns all markets in the program
-- `createMarginAccount(params: CreateMarginAccountParams): Promise<PublicKey>` - Creates global margin account
-- `getMarginAccount(userPublicKey: PublicKey): Promise<MarginAccount>` - Gets global margin account for user
-- `depositCollateral(params: DepositCollateralParams): Promise<void>` - Deposits to global margin account
-- `withdrawCollateral(params: WithdrawCollateralParams): Promise<void>` - Withdraws from global margin account
-- `buildPlaceMarketOrderTransaction(params, userPublicKey): Promise<Transaction>` - Builds order transaction
-- `buildCloseMarketOrderTransaction(params, userPublicKey): Promise<Transaction>` - Builds close transaction
+- `createMarginAccount(params: CreateMarginAccountParams): Promise<PublicKey>`
+- `getMarginAccount(marginAccountAddress: PublicKey): Promise<MarginAccount>`
+- `depositCollateral(params: DepositCollateralParams): Promise<void>`
+- `withdrawCollateral(params: WithdrawCollateralParams): Promise<void>`
 
 ### Market Object
 
@@ -167,63 +257,6 @@ interface Market {
   vault: PublicKey;
 }
 ```
-
-### Global Margin Account Object
-
-The global margin account contains:
-
-```typescript
-interface MarginAccount {
-  owner: PublicKey;
-  marginType: { isolated: {} } | { cross: {} };
-  collateral: BN;
-  allocatedMargin: BN;
-  positions: PublicKey[]; // Positions across all markets
-  bump: number;
-}
-```
-
-## Multi-Network Support
-
-The SDK supports multiple Solana networks:
-
-```typescript
-import { PerpetualSwapSDK, Network } from '@swiv-sdk/perpetual-swap-sdk';
-
-// Create SDK for specific network
-const sonicSdk = PerpetualSwapSDK.createForNetwork(Network.SONIC_TESTNET);
-const devnetSdk = PerpetualSwapSDK.createForNetwork(Network.SOLANA_DEVNET);
-
-// Or initialize manually
-const sdk = new PerpetualSwapSDK(connection, wallet, Network.SONIC_TESTNET);
-```
-
-## Troubleshooting
-
-### Common Errors
-
-1. **"Account not initialised caused by account position"**
-   - This occurs when trying to close a position that's already been closed
-   - Use `safeClosePosition()` method for robust position closing
-   - Check if position exists before closing
-
-2. **"InsufficientMargin"**
-   - Ensure you have enough collateral in your global margin account
-   - Check leverage requirements for the market
-   - Verify position size doesn't exceed available margin
-
-3. **"insufficient funds" during withdrawal**
-   - Ensure the market vault has enough tokens
-   - Check that you're not withdrawing more than your collateral
-   - Verify the correct market vault is being used
-
-### Best Practices
-
-1. **Always check margin account state** before placing orders
-2. **Use isolated margin** for better risk management
-3. **Monitor position sizes** to avoid liquidation
-4. **Clean up positions** in tests using `beforeEach` hooks
-5. **Handle network-specific program IDs** correctly
 
 ## License
 

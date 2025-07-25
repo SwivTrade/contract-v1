@@ -19,6 +19,49 @@ import mockOracleIdl from './idl/mock_oracle.json';
 import { Oracle, InitializeOracleParams, UpdateOracleParams } from './types/oracle';
 
 /**
+ * Network configuration for different environments
+ */
+export enum Network {
+  SONIC_TESTNET = 'sonic-testnet',
+  SOLANA_DEVNET = 'solana-devnet',
+  LOCALNET = 'localnet'
+}
+
+/**
+ * Network configuration interface
+ */
+export interface NetworkConfig {
+  name: Network;
+  rpcUrl: string;
+  contractsProgramId: string;
+  mockOracleProgramId: string;
+}
+
+/**
+ * Predefined network configurations
+ */
+export const NETWORK_CONFIGS: Record<Network, NetworkConfig> = {
+  [Network.SONIC_TESTNET]: {
+    name: Network.SONIC_TESTNET,
+    rpcUrl: 'https://api.testnet.sonic.game/',
+    contractsProgramId: '6UnAEvz8tLBLXM2uDmbYWYKZ6UuAgdxJHTss8HC9h3wf',
+    mockOracleProgramId: '7ufLxFvoeg7MukzjBEcs6MqpgEV9Yo6gGBXkPei14WpU'
+  },
+  [Network.SOLANA_DEVNET]: {
+    name: Network.SOLANA_DEVNET,
+    rpcUrl: 'https://api.devnet.solana.com',
+    contractsProgramId: '6UnAEvz8tLBLXM2uDmbYWYKZ6UuAgdxJHTss8HC9h3wf',
+    mockOracleProgramId: '7ufLxFvoeg7MukzjBEcs6MqpgEV9Yo6gGBXkPei14WpU'
+  },
+  [Network.LOCALNET]: {
+    name: Network.LOCALNET,
+    rpcUrl: 'http://localhost:8899',
+    contractsProgramId: '6UnAEvz8tLBLXM2uDmbYWYKZ6UuAgdxJHTss8HC9h3wf',
+    mockOracleProgramId: '7ufLxFvoeg7MukzjBEcs6MqpgEV9Yo6gGBXkPei14WpU'
+  }
+};
+
+/**
  * PerpetualSwapSDK - Main SDK class for interacting with the PerpetualSwap protocol
  * 
  * This SDK is designed to be used in two modes:
@@ -32,6 +75,7 @@ export class PerpetualSwapSDK {
   private isAdmin: boolean;
   private adminKeypair?: Keypair;
   private connection: Connection;
+  private networkConfig: NetworkConfig;
 
   /**
    * Initialize the SDK
@@ -39,13 +83,17 @@ export class PerpetualSwapSDK {
    * @param connection - Solana connection
    * @param wallet - Optional wallet for admin operations
    * @param adminKeypair - Optional admin keypair for admin operations
+   * @param network - Network to use (defaults to SONIC_TESTNET)
    */
   constructor(
     connection: Connection,
     wallet?: Wallet,
-    adminKeypair?: Keypair
+    adminKeypair?: Keypair,
+    network: Network = Network.SONIC_TESTNET
   ) {
     this.connection = connection;
+    this.networkConfig = NETWORK_CONFIGS[network];
+    
     // If wallet is provided, we're in admin mode
     if (wallet) {
       this.provider = new AnchorProvider(connection, wallet, {
@@ -61,6 +109,7 @@ export class PerpetualSwapSDK {
       this.isAdmin = false;
     }
     
+    // Initialize programs with the correct program IDs for the selected network
     this.program = new Program<Contracts>(
       IDL as Contracts,
       this.provider
@@ -70,6 +119,47 @@ export class PerpetualSwapSDK {
       mockOracleIdl as MockOracle,
       this.provider
     );
+  }
+
+  /**
+   * Get the current network configuration
+   */
+  public getNetworkConfig(): NetworkConfig {
+    return this.networkConfig;
+  }
+
+  /**
+   * Get the current network name
+   */
+  public getNetwork(): Network {
+    return this.networkConfig.name;
+  }
+
+  /**
+   * Get the contracts program ID for the current network
+   */
+  public getContractsProgramId(): PublicKey {
+    return new PublicKey(this.networkConfig.contractsProgramId);
+  }
+
+  /**
+   * Get the mock oracle program ID for the current network
+   */
+  public getMockOracleProgramId(): PublicKey {
+    return new PublicKey(this.networkConfig.mockOracleProgramId);
+  }
+
+  /**
+   * Create a new SDK instance for a different network
+   */
+  public static createForNetwork(
+    network: Network,
+    wallet?: Wallet,
+    adminKeypair?: Keypair
+  ): PerpetualSwapSDK {
+    const config = NETWORK_CONFIGS[network];
+    const connection = new Connection(config.rpcUrl, 'confirmed');
+    return new PerpetualSwapSDK(connection, wallet, adminKeypair, network);
   }
 
   /**
@@ -571,4 +661,6 @@ export * from './types/position';
 export * from './utils';
 
 // Export oracle types
-export * from './types/oracle'; 
+export * from './types/oracle';
+
+ 

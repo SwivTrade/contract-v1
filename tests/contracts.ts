@@ -5,25 +5,27 @@ import { Connection, Keypair, LAMPORTS_PER_SOL, PublicKey } from "@solana/web3.j
 import { BN } from "@coral-xyz/anchor";
 import { TOKEN_PROGRAM_ID, createMint, createAccount, mintTo } from "@solana/spl-token";
 import { assert } from "chai";
-import { PerpetualSwapSDK } from "../sdk/src/index";
+import { PerpetualSwapSDK, Network } from "../sdk/src/index";
 import * as fs from 'fs';
 import * as path from 'path';
 
 describe("Contract Tests", () => {
-  // Connection setup
-  const connection = new Connection('https://api.testnet.sonic.game/', 'confirmed');
+  // Network configuration - using Sonic testnet
+  const network = Network.SOLANA_DEVNET;
+  
   // Keypair setup
   const keypairPath = path.join(__dirname, 'keypair.json');
   const tokenDataPath = path.join(__dirname, 'token-data.json');
   let keypair: Keypair;
 
-  // Market setup
+ 
   const marketSymbol = "t4-PERP";
+
   const initialFundingRate = 0;
   const fundingInterval = 3600;
   const maintenanceMarginRatio = 100; // 1% (changed from 500 to support higher leverage)
   const initialMarginRatio = 200; // 2% (changed from 1000 to support up to 50x leverage)
-  const maxLeverage = 50; // Increased from 10 to 50
+  const maxLeverage = 30; // Increased from 10 to 50
   const liquidationFeeRatio = 250; // 2.5%
 
   // PDAs and accounts
@@ -40,8 +42,13 @@ describe("Contract Tests", () => {
   let provider: anchor.AnchorProvider;
   let mockOraclePda: PublicKey;
   let mockOracleBump: number;
+  let connection: Connection;
 
   before(async () => {
+    // Initialize SDK with network configuration
+    sdk = PerpetualSwapSDK.createForNetwork(network);
+    connection = sdk.getProvider().connection;
+    
     // Load or create keypair
     if (fs.existsSync(keypairPath)) {
       const secretKey = new Uint8Array(JSON.parse(fs.readFileSync(keypairPath, 'utf-8')));
@@ -58,6 +65,9 @@ describe("Contract Tests", () => {
     // Check wallet balance
     const balance = await connection.getBalance(keypair.publicKey);
     console.log('Wallet balance:', balance / LAMPORTS_PER_SOL, 'SOL');
+    console.log('Network:', sdk.getNetwork());
+    console.log('Contracts Program ID:', sdk.getContractsProgramId().toBase58());
+    console.log('Mock Oracle Program ID:', sdk.getMockOracleProgramId().toBase58());
     
     if (balance === 0) {
       throw new Error('Wallet needs funding. Please send SOL to: ' + keypair.publicKey.toBase58());
@@ -67,8 +77,8 @@ describe("Contract Tests", () => {
     provider = new anchor.AnchorProvider(connection as any, wallet, {});
     anchor.setProvider(provider);
 
-    // Initialize SDK
-    sdk = new PerpetualSwapSDK(connection as any, wallet);
+    // Reinitialize SDK with wallet for admin operations
+    sdk = new PerpetualSwapSDK(connection, wallet, keypair, network);
 
     // Load or create token mint and authority
     let tokenData: {

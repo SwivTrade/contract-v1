@@ -6,7 +6,7 @@ resolution = true
 skip-lint = false
 
 
-[programs.localnet]
+[programs.devnet]
 contracts = "2nga8op3u3j7Df7wsQv2n5hkRqjEFLjkWGGAfn4aHsfy"
 mock-oracle = "G2EDsqC3igU7f1PgvZgTSLdAMTn9qmwEq7y8Z92hFTCH"
 
