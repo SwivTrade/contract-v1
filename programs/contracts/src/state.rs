@@ -134,6 +134,7 @@ impl Order {
 pub struct MarginAccount {
     pub owner: Pubkey,
     pub margin_type: MarginType,  // New field to specify margin type
+    pub collateral_mint: Pubkey,  // Token mint this margin account is tied to (e.g., USDC)
     pub collateral: u64,
     pub allocated_margin: u64,    // For isolated margin tracking
     pub positions: Vec<Pubkey>,   // Only track positions now
@@ -144,6 +145,7 @@ impl MarginAccount {
     pub const SPACE: usize = 8 + // discriminator
         32 + // owner: Pubkey
         1 + // margin_type: MarginType
+        32 + // collateral_mint: Pubkey
         8 + // collateral: u64
         8 + // allocated_margin: u64
         4 + (32 * 10) + // positions: Vec<Pubkey> (max 10 positions)

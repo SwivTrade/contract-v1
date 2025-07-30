@@ -6,6 +6,7 @@ use crate::{Market, MarginAccount, Position, MarginType, errors::ErrorCode, even
 pub fn deposit_collateral(ctx: Context<DepositCollateral>, amount: u64) -> Result<()> {
     require!(amount >= 1000, ErrorCode::DepositTooSmall);
     require!(ctx.accounts.market.is_active, ErrorCode::MarketInactive);
+    require!(ctx.accounts.margin_account.collateral_mint == ctx.accounts.mint.key(), ErrorCode::InvalidCollateralMint);
 
     // Transfer tokens from user to market vault
     let transfer_ctx = CpiContext::new(
@@ -41,6 +42,7 @@ pub fn withdraw_collateral<'info>(
 ) -> Result<()> {
     require!(amount >= 1000, ErrorCode::WithdrawalTooSmall);
     require!(ctx.accounts.market.is_active, ErrorCode::MarketInactive);
+    require!(ctx.accounts.margin_account.collateral_mint == ctx.accounts.mint.key(), ErrorCode::InvalidCollateralMint);
 
     let margin_account = &mut ctx.accounts.margin_account;
     require!(margin_account.collateral >= amount, ErrorCode::InsufficientCollateral);
@@ -124,6 +126,7 @@ pub fn create_margin_account(ctx: Context<CreateMarginAccount>, margin_type: Mar
     let margin_account = &mut ctx.accounts.margin_account;
     margin_account.owner = ctx.accounts.owner.key();
     margin_account.margin_type = margin_type;
+    margin_account.collateral_mint = ctx.accounts.collateral_mint.key();
     margin_account.collateral = 0;
     margin_account.allocated_margin = 0;
     margin_account.positions = Vec::new();
@@ -227,10 +230,11 @@ pub struct CreateMarginAccount<'info> {
         init,
         payer = owner,
         space = MarginAccount::SPACE,
-        seeds = [b"margin_account", owner.key().as_ref()],
+        seeds = [b"margin_account", owner.key().as_ref(), collateral_mint.key().as_ref()],
         bump,
     )]
     pub margin_account: Account<'info, MarginAccount>,
+    pub collateral_mint: Account<'info, Mint>,
 
     pub system_program: Program<'info, System>,
 }

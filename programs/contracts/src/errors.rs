@@ -72,4 +72,6 @@ pub enum ErrorCode {
     WithdrawalExceedsAvailableMargin,
     #[msg("Invalid vault provided")]
     InvalidVault,
+    #[msg("Collateral mint does not match margin account")]
+    InvalidCollateralMint,
 }
