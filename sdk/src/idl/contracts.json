@@ -94,9 +94,16 @@
               {
                 "kind": "account",
                 "path": "owner"
+              },
+              {
+                "kind": "account",
+                "path": "collateral_mint"
               }
             ]
           }
+        },
+        {
+          "name": "collateral_mint"
         },
         {
           "name": "system_program",
@@ -1000,6 +1007,11 @@
       "code": 6034,
       "name": "InvalidVault",
       "msg": "Invalid vault provided"
+    },
+    {
+      "code": 6035,
+      "name": "InvalidCollateralMint",
+      "msg": "Collateral mint does not match margin account"
     }
   ],
   "types": [
@@ -1115,6 +1127,10 @@
                 "name": "MarginType"
               }
             }
+          },
+          {
+            "name": "collateral_mint",
+            "type": "pubkey"
           },
           {
             "name": "collateral",

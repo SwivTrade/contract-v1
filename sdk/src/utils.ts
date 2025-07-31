@@ -21,16 +21,19 @@ export function findMarketPda(
  * Find the PDA for a margin account
  * @param programId The program ID
  * @param owner The owner's public key
+ * @param collateralMint The collateral token mint
  * @returns A tuple containing the margin account PDA and the bump seed
  */
 export function findMarginAccountPda(
   programId: PublicKey,
-  owner: PublicKey
+  owner: PublicKey,
+  collateralMint: PublicKey
 ): [PublicKey, number] {
   return PublicKey.findProgramAddressSync(
     [
       Buffer.from("margin_account"),
-      owner.toBuffer() // Remove market.toBuffer() - margin account is now global
+      owner.toBuffer(),
+      collateralMint.toBuffer()
     ],
     programId
   );

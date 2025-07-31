@@ -301,7 +301,8 @@ export class PerpetualSwapSDK {
   ): Promise<Transaction> {
     const [marginAccountPda, marginAccountBump] = findMarginAccountPda(
       this.program.programId,
-      userPublicKey
+      userPublicKey,
+      params.collateralMint
     );
 
     const instruction = await this.program.methods
@@ -309,7 +310,7 @@ export class PerpetualSwapSDK {
       .accountsStrict({
         owner: userPublicKey,
         marginAccount: marginAccountPda,
-        // Remove market parameter - margin account is now global
+        collateralMint: params.collateralMint,
         systemProgram: SystemProgram.programId,
       })
       .instruction();
@@ -355,7 +356,7 @@ export class PerpetualSwapSDK {
     userPublicKey: PublicKey
   ): Promise<Transaction> {
     // Get the margin account data to check for positions
-    const marginAccount = await this.getMarginAccount(userPublicKey);
+    const marginAccount = await this.getMarginAccount(userPublicKey, params.mint);
     
     // If there are no positions, we can proceed without position PDAs
     if (marginAccount.positions.length === 0) {
@@ -422,10 +423,10 @@ export class PerpetualSwapSDK {
    * Get margin account details
    */
   async getMarginAccount(
-    userPublicKey: PublicKey
-    // Remove marketPda parameter - margin account is now global
+    userPublicKey: PublicKey,
+    collateralMint: PublicKey
   ): Promise<MarginAccount> {
-    const [marginAccountPda] = await this.findMarginAccountPda(userPublicKey);
+    const [marginAccountPda] = await this.findMarginAccountPda(userPublicKey, collateralMint);
     return await this.program.account.marginAccount.fetch(marginAccountPda) as unknown as MarginAccount;
   }
 
@@ -456,10 +457,10 @@ export class PerpetualSwapSDK {
    * Find the PDA for a margin account
    */
   async findMarginAccountPda(
-    owner: PublicKey
-    // Remove marketPda parameter - margin account is now global
+    owner: PublicKey,
+    collateralMint: PublicKey
   ): Promise<[PublicKey, number]> {
-    return findMarginAccountPda(this.program.programId, owner);
+    return findMarginAccountPda(this.program.programId, owner, collateralMint);
   }
 
   /**
@@ -661,6 +662,6 @@ export * from './types/position';
 export * from './utils';
 
 // Export oracle types
-export * from './types/oracle';
+export * from './types/oracle'; 
 
  

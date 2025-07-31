@@ -100,9 +100,16 @@ export type Contracts = {
               {
                 "kind": "account",
                 "path": "owner"
+              },
+              {
+                "kind": "account",
+                "path": "collateralMint"
               }
             ]
           }
+        },
+        {
+          "name": "collateralMint"
         },
         {
           "name": "systemProgram",
@@ -1006,6 +1013,11 @@ export type Contracts = {
       "code": 6034,
       "name": "invalidVault",
       "msg": "Invalid vault provided"
+    },
+    {
+      "code": 6035,
+      "name": "invalidCollateralMint",
+      "msg": "Collateral mint does not match margin account"
     }
   ],
   "types": [
@@ -1121,6 +1133,10 @@ export type Contracts = {
                 "name": "marginType"
               }
             }
+          },
+          {
+            "name": "collateralMint",
+            "type": "pubkey"
           },
           {
             "name": "collateral",
